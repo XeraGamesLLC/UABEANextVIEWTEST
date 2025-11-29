@@ -158,41 +158,8 @@ public class SceneData
         var goToMeshRenderer = new Dictionary<long, AssetFileInfo>();
         var goToMeshCollider = new Dictionary<long, AssetFileInfo>();
 
-        // Track static batch info for MeshRenderers (used for combined meshes)
-        var goToStaticBatchInfo = new Dictionary<long, (int firstSubMesh, int subMeshCount, long batchRootPathId)>();
-
-        // Track static flags for GameObjects (used to prefer MeshCollider mesh for static objects)
-        var goStaticFlags = new Dictionary<long, uint>();
-        foreach (var goInfo in goInfos)
-        {
-            var goBf = _workspace.GetBaseField(fileInst, goInfo.PathId);
-            if (goBf != null)
-            {
-                // m_StaticEditorFlags: non-zero means the object has some static flags set
-                // Note: This field may not exist in all Unity versions, so we need to check
-                var staticFlagsField = goBf["m_StaticEditorFlags"];
-                if (staticFlagsField != null && !staticFlagsField.IsDummy)
-                {
-                    try
-                    {
-                        var staticFlags = staticFlagsField.AsUInt;
-                        goStaticFlags[goInfo.PathId] = staticFlags;
-                    }
-                    catch
-                    {
-                        // Field exists but can't be read as uint - ignore
-                        goStaticFlags[goInfo.PathId] = 0;
-                    }
-                }
-                else
-                {
-                    goStaticFlags[goInfo.PathId] = 0;
-                }
-            }
-        }
-
-        // Cache for combined meshes (keyed by StaticBatchRoot PathId)
-        var combinedMeshCache = new Dictionary<long, MeshObj?>();
+        // Track which GameObjects have batched/combined meshes (so we skip their MeshFilter)
+        var batchedGameObjects = new HashSet<long>();
 
         foreach (var mfInfo in meshFilterInfos)
         {
@@ -211,25 +178,15 @@ public class SceneData
             var goPathId = mrBf["m_GameObject"]["m_PathID"].AsLong;
             goToMeshRenderer[goPathId] = mrInfo;
 
-            // Read static batch info for combined meshes
+            // Check if this object uses a batched/combined mesh
             var staticBatchInfo = mrBf["m_StaticBatchInfo"];
             if (staticBatchInfo != null && !staticBatchInfo.IsDummy)
             {
-                var firstSubMesh = staticBatchInfo["firstSubMesh"].AsInt;
                 var subMeshCount = staticBatchInfo["subMeshCount"].AsInt;
-
                 if (subMeshCount > 0)
                 {
-                    // Get the static batch root (which has the combined mesh)
-                    var staticBatchRoot = mrBf["m_StaticBatchRoot"];
-                    long batchRootPathId = 0;
-                    if (staticBatchRoot != null && !staticBatchRoot.IsDummy)
-                    {
-                        batchRootPathId = staticBatchRoot["m_PathID"].AsLong;
-                    }
-
-                    goToStaticBatchInfo[goPathId] = (firstSubMesh, subMeshCount, batchRootPathId);
-                    Log($"Found static batch info for GO {goPathId}: firstSubMesh={firstSubMesh}, subMeshCount={subMeshCount}, batchRoot={batchRootPathId}");
+                    // This object's MeshFilter points to a combined mesh - mark it as batched
+                    batchedGameObjects.Add(goPathId);
                 }
             }
         }
@@ -244,84 +201,22 @@ public class SceneData
         }
 
         // Load mesh data for each scene object
-        // For static objects, prefer MeshCollider's mesh (if available) over MeshFilter's mesh
-        // This is important because static objects often use simplified collision meshes for accurate collision representation
+        // Priority order:
+        // 1. MeshCollider mesh (if exists) - most accurate representation for batched objects
+        // 2. MeshFilter mesh (only for non-batched objects) - original mesh
+        // Note: Batched objects without MeshCollider will not show a mesh (combined meshes look fragmented)
         int meshesLoaded = 0;
         int meshLoadErrors = 0;
-        int batchedMeshesLoaded = 0;
+        int colliderMeshesLoaded = 0;
         foreach (var sceneObj in AllObjects)
         {
             var goPathId = tfmToGoMap.GetValueOrDefault(sceneObj.PathId, 0);
             if (goPathId == 0) continue;
 
-            // Check if this object is static (has any static flags set)
-            var isStatic = goStaticFlags.TryGetValue(goPathId, out var staticFlags) && staticFlags != 0;
-
-            // Check if this object has a batched mesh (combined with other static objects)
             bool meshLoaded = false;
-            if (goToStaticBatchInfo.TryGetValue(goPathId, out var batchInfo) && batchInfo.batchRootPathId != 0)
-            {
-                try
-                {
-                    // Try to get or load the combined mesh from the batch root
-                    if (!combinedMeshCache.TryGetValue(batchInfo.batchRootPathId, out var combinedMesh))
-                    {
-                        // Load the combined mesh from the batch root's MeshFilter
-                        // First, find the GameObject for the batch root (it's a Transform reference)
-                        var batchRootTfmBf = _workspace.GetBaseField(fileInst, 0, batchInfo.batchRootPathId);
-                        if (batchRootTfmBf != null)
-                        {
-                            var batchRootGoPathId = batchRootTfmBf["m_GameObject"]["m_PathID"].AsLong;
-                            if (goToMeshFilter.TryGetValue(batchRootGoPathId, out var batchRootMfInfo))
-                            {
-                                var batchRootMfBf = _workspace.GetBaseField(fileInst, batchRootMfInfo.PathId);
-                                if (batchRootMfBf != null)
-                                {
-                                    var batchMeshPtr = batchRootMfBf["m_Mesh"];
-                                    if (batchMeshPtr != null && !batchMeshPtr.IsDummy)
-                                    {
-                                        var batchMeshPathId = batchMeshPtr["m_PathID"].AsLong;
-                                        var batchMeshFileId = batchMeshPtr["m_FileID"].AsInt;
 
-                                        if (batchMeshPathId != 0)
-                                        {
-                                            var batchMeshBf = _workspace.GetBaseField(fileInst, batchMeshFileId, batchMeshPathId);
-                                            if (batchMeshBf != null)
-                                            {
-                                                var version = fileInst.file.Metadata.UnityVersion;
-                                                combinedMesh = new MeshObj(fileInst, batchMeshBf, new UnityVersion(version));
-                                                Log($"Loaded combined mesh from batch root (PathId: {batchInfo.batchRootPathId}) with {combinedMesh.SubMeshes?.Count ?? 0} submeshes");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        combinedMeshCache[batchInfo.batchRootPathId] = combinedMesh;
-                    }
-
-                    // Extract the submesh for this object
-                    if (combinedMesh != null)
-                    {
-                        sceneObj.Mesh = combinedMesh.ExtractSubMesh(batchInfo.firstSubMesh, batchInfo.subMeshCount);
-                        if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
-                        {
-                            sceneObj.UVs = sceneObj.Mesh.UVs[0];
-                        }
-                        meshLoaded = true;
-                        batchedMeshesLoaded++;
-                        meshesLoaded++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log($"Batched mesh extraction failed for '{sceneObj.Name}': {ex.Message}");
-                    meshLoadErrors++;
-                }
-            }
-
-            // For static objects without batching, try to use MeshCollider's mesh first
-            if (!meshLoaded && isStatic && goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
+            // First priority: Try MeshCollider mesh (best representation for static batched objects)
+            if (goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
             {
                 var mcBf = _workspace.GetBaseField(fileInst, mcInfo.PathId);
                 if (mcBf != null)
@@ -342,12 +237,12 @@ public class SceneData
                                     var version = fileInst.file.Metadata.UnityVersion;
                                     sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
 
-                                    // Get UVs if available (though collision meshes typically don't have UVs)
                                     if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
                                     {
                                         sceneObj.UVs = sceneObj.Mesh.UVs[0];
                                     }
                                     meshLoaded = true;
+                                    colliderMeshesLoaded++;
                                     meshesLoaded++;
                                 }
                             }
@@ -355,48 +250,52 @@ public class SceneData
                             {
                                 Log($"MeshCollider mesh load failed for '{sceneObj.Name}': {ex.Message}");
                                 meshLoadErrors++;
-                                // MeshCollider mesh loading failed, will fall back to MeshFilter
                             }
                         }
                     }
                 }
             }
 
-            // Fall back to MeshFilter's mesh for non-static objects or if MeshCollider loading failed
+            // Second priority: Try MeshFilter mesh (if not batched or no collider mesh)
             if (!meshLoaded && goToMeshFilter.TryGetValue(goPathId, out var mfInfo))
             {
-                var mfBf = _workspace.GetBaseField(fileInst, mfInfo.PathId);
-                if (mfBf != null)
+                // Check if this is a batched object - if so, skip MeshFilter (it points to combined mesh)
+                var isBatched = batchedGameObjects.Contains(goPathId);
+
+                if (!isBatched)
                 {
-                    var meshPtr = mfBf["m_Mesh"];
-                    if (meshPtr != null && !meshPtr.IsDummy)
+                    var mfBf = _workspace.GetBaseField(fileInst, mfInfo.PathId);
+                    if (mfBf != null)
                     {
-                        var meshPathId = meshPtr["m_PathID"].AsLong;
-                        var meshFileId = meshPtr["m_FileID"].AsInt;
-
-                        if (meshPathId != 0)
+                        var meshPtr = mfBf["m_Mesh"];
+                        if (meshPtr != null && !meshPtr.IsDummy)
                         {
-                            try
-                            {
-                                var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
-                                if (meshBf != null)
-                                {
-                                    var version = fileInst.file.Metadata.UnityVersion;
-                                    sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+                            var meshPathId = meshPtr["m_PathID"].AsLong;
+                            var meshFileId = meshPtr["m_FileID"].AsInt;
 
-                                    // Get UVs if available
-                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
-                                    {
-                                        sceneObj.UVs = sceneObj.Mesh.UVs[0];
-                                    }
-                                    meshesLoaded++;
-                                }
-                            }
-                            catch (Exception ex)
+                            if (meshPathId != 0)
                             {
-                                Log($"MeshFilter mesh load failed for '{sceneObj.Name}': {ex.Message}");
-                                meshLoadErrors++;
-                                // Mesh loading failed, skip
+                                try
+                                {
+                                    var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                                    if (meshBf != null)
+                                    {
+                                        var version = fileInst.file.Metadata.UnityVersion;
+                                        sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                        if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                        {
+                                            sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                        }
+                                        meshLoaded = true;
+                                        meshesLoaded++;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"MeshFilter mesh load failed for '{sceneObj.Name}': {ex.Message}");
+                                    meshLoadErrors++;
+                                }
                             }
                         }
                     }
@@ -432,7 +331,7 @@ public class SceneData
             }
         }
 
-        Log($"Loaded {meshesLoaded} meshes ({batchedMeshesLoaded} from combined batches, {meshLoadErrors} errors)");
+        Log($"Loaded {meshesLoaded} meshes ({colliderMeshesLoaded} from MeshColliders, {meshLoadErrors} errors)");
 
         // Compute world matrices and bounds
         Log("Computing world matrices and bounds...");
