@@ -384,6 +384,238 @@ public partial class SceneViewToolViewModel : Tool
         StatusText = "Camera reset to default position.";
     }
 
+    [RelayCommand]
+    private void DuplicateObject()
+    {
+        if (SelectedObject == null || SceneData == null)
+        {
+            StatusText = "No object selected to duplicate.";
+            return;
+        }
+
+        try
+        {
+            var original = SelectedObject;
+            var duplicate = new SceneObject
+            {
+                Name = original.Name + " (Copy)",
+                PathId = -DateTime.Now.Ticks, // Generate a unique negative PathId for copies
+                LocalPosition = original.LocalPosition + new System.Numerics.Vector3(1f, 0f, 0f), // Offset slightly
+                LocalRotation = original.LocalRotation,
+                LocalScale = original.LocalScale,
+                Mesh = original.Mesh, // Share mesh reference
+                UVs = original.UVs,
+                TextureData = original.TextureData,
+                TextureWidth = original.TextureWidth,
+                TextureHeight = original.TextureHeight,
+                Parent = original.Parent
+            };
+
+            // Add to parent's children list
+            if (original.Parent != null)
+            {
+                original.Parent.Children.Add(duplicate);
+            }
+            else
+            {
+                SceneData.RootObjects.Add(duplicate);
+            }
+
+            // Add to AllObjects list
+            SceneData.AllObjects.Add(duplicate);
+
+            // Compute transform and bounds
+            duplicate.ComputeWorldMatrix();
+            duplicate.ComputeBounds();
+
+            // Select the duplicate
+            SelectedObject.IsSelected = false;
+            duplicate.IsSelected = true;
+            SelectedObject = duplicate;
+
+            // Notify scene view to rebuild
+            OnPropertyChanged(nameof(SceneData));
+
+            Log(SceneLogLevel.Info, $"Duplicated object: {original.Name} -> {duplicate.Name}");
+            StatusText = $"Duplicated: {duplicate.Name}";
+        }
+        catch (Exception ex)
+        {
+            Log(SceneLogLevel.Error, $"Failed to duplicate object: {ex.Message}");
+            StatusText = $"Error duplicating object: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteObject()
+    {
+        if (SelectedObject == null || SceneData == null)
+        {
+            StatusText = "No object selected to delete.";
+            return;
+        }
+
+        try
+        {
+            var objToDelete = SelectedObject;
+            var objName = objToDelete.Name;
+
+            // Remove from parent's children list
+            if (objToDelete.Parent != null)
+            {
+                objToDelete.Parent.Children.Remove(objToDelete);
+            }
+            else
+            {
+                SceneData.RootObjects.Remove(objToDelete);
+            }
+
+            // Remove from AllObjects list (and all descendants)
+            RemoveObjectAndDescendants(objToDelete);
+
+            // Clear selection
+            SelectedObject = null;
+
+            // Notify scene view to rebuild
+            OnPropertyChanged(nameof(SceneData));
+
+            Log(SceneLogLevel.Info, $"Deleted object: {objName}");
+            StatusText = $"Deleted: {objName}";
+        }
+        catch (Exception ex)
+        {
+            Log(SceneLogLevel.Error, $"Failed to delete object: {ex.Message}");
+            StatusText = $"Error deleting object: {ex.Message}";
+        }
+    }
+
+    private void RemoveObjectAndDescendants(SceneObject obj)
+    {
+        if (SceneData == null) return;
+
+        // Remove children first (recursive)
+        foreach (var child in obj.Children.ToList())
+        {
+            RemoveObjectAndDescendants(child);
+        }
+
+        SceneData.AllObjects.Remove(obj);
+    }
+
+    [RelayCommand]
+    private void MoveToRoot()
+    {
+        if (SelectedObject == null || SceneData == null)
+        {
+            StatusText = "No object selected to move.";
+            return;
+        }
+
+        if (SelectedObject.Parent == null)
+        {
+            StatusText = "Object is already at root level.";
+            return;
+        }
+
+        try
+        {
+            var obj = SelectedObject;
+
+            // Remove from current parent
+            obj.Parent.Children.Remove(obj);
+
+            // Add to root
+            obj.Parent = null;
+            SceneData.RootObjects.Add(obj);
+
+            // Recompute world matrix
+            obj.ComputeWorldMatrix();
+            obj.ComputeBounds();
+
+            // Notify scene view to rebuild
+            OnPropertyChanged(nameof(SceneData));
+
+            Log(SceneLogLevel.Info, $"Moved object to root: {obj.Name}");
+            StatusText = $"Moved to root: {obj.Name}";
+        }
+        catch (Exception ex)
+        {
+            Log(SceneLogLevel.Error, $"Failed to move object: {ex.Message}");
+            StatusText = $"Error moving object: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Moves the selected object to be a child of the specified parent object.
+    /// </summary>
+    public void MoveObjectToParent(SceneObject objectToMove, SceneObject? newParent)
+    {
+        if (SceneData == null) return;
+
+        // Prevent circular parenting
+        if (newParent != null && IsDescendantOf(newParent, objectToMove))
+        {
+            StatusText = "Cannot make an object a child of its own descendant.";
+            return;
+        }
+
+        try
+        {
+            // Remove from current parent
+            if (objectToMove.Parent != null)
+            {
+                objectToMove.Parent.Children.Remove(objectToMove);
+            }
+            else
+            {
+                SceneData.RootObjects.Remove(objectToMove);
+            }
+
+            // Add to new parent
+            objectToMove.Parent = newParent;
+            if (newParent != null)
+            {
+                newParent.Children.Add(objectToMove);
+            }
+            else
+            {
+                SceneData.RootObjects.Add(objectToMove);
+            }
+
+            // Recompute world matrices for the moved object and its children
+            objectToMove.ComputeWorldMatrix();
+            foreach (var child in objectToMove.Children)
+            {
+                child.ComputeWorldMatrix();
+            }
+            objectToMove.ComputeBounds();
+
+            // Notify scene view to rebuild
+            OnPropertyChanged(nameof(SceneData));
+
+            var parentName = newParent?.Name ?? "Root";
+            Log(SceneLogLevel.Info, $"Moved '{objectToMove.Name}' to parent '{parentName}'");
+            StatusText = $"Moved '{objectToMove.Name}' to '{parentName}'";
+        }
+        catch (Exception ex)
+        {
+            Log(SceneLogLevel.Error, $"Failed to move object: {ex.Message}");
+            StatusText = $"Error moving object: {ex.Message}";
+        }
+    }
+
+    private static bool IsDescendantOf(SceneObject potentialDescendant, SceneObject potentialAncestor)
+    {
+        var current = potentialDescendant.Parent;
+        while (current != null)
+        {
+            if (current == potentialAncestor)
+                return true;
+            current = current.Parent;
+        }
+        return false;
+    }
+
     public void OnObjectSelected(SceneObject? obj)
     {
         SelectedObject = obj;
@@ -468,5 +700,27 @@ public class LogLevelToColorConverter : Avalonia.Data.Converters.IMultiValueConv
             };
         }
         return Avalonia.Media.Brushes.White;
+    }
+}
+
+/// <summary>
+/// Converter for bool to font weight (bold for true, normal for false)
+/// </summary>
+public class BoolToFontWeightConverter : Avalonia.Data.Converters.IValueConverter
+{
+    public static readonly BoolToFontWeightConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        if (value is bool hasMesh && hasMesh)
+        {
+            return Avalonia.Media.FontWeight.SemiBold;
+        }
+        return Avalonia.Media.FontWeight.Normal;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        throw new NotImplementedException();
     }
 }

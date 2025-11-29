@@ -18,6 +18,7 @@ public class MeshObj
     public float[] Tangents;
     public float[] Colors;
     public float[][] UVs;
+    public List<SubMesh> SubMeshes;
 
     public MeshObj()
     {
@@ -28,6 +29,7 @@ public class MeshObj
         Tangents = [];
         Colors = [];
         UVs = [];
+        SubMeshes = [];
     }
 
     public MeshObj(AssetsFileInstance fileInst, AssetTypeValueField baseField, UnityVersion version)
@@ -39,15 +41,174 @@ public class MeshObj
         Tangents = [];
         Colors = [];
         UVs = [];
+        SubMeshes = [];
 
         Read(fileInst, baseField, version);
+    }
+
+    /// <summary>
+    /// Creates a new MeshObj containing only the specified submesh range from this mesh.
+    /// Used for extracting individual meshes from combined/batched meshes.
+    /// </summary>
+    public MeshObj ExtractSubMesh(int firstSubMesh, int subMeshCount)
+    {
+        if (SubMeshes == null || SubMeshes.Count == 0 || firstSubMesh >= SubMeshes.Count)
+        {
+            return this; // Return original if no submesh info
+        }
+
+        var result = new MeshObj();
+
+        // Calculate total index range from submeshes
+        int minIndex = int.MaxValue;
+        int maxIndex = int.MinValue;
+        var newIndices = new List<ushort>();
+
+        for (int i = firstSubMesh; i < Math.Min(firstSubMesh + subMeshCount, SubMeshes.Count); i++)
+        {
+            var subMesh = SubMeshes[i];
+            int indexStart = (int)subMesh.IndexStart;
+            int indexCount = (int)subMesh.IndexCount;
+
+            for (int j = indexStart; j < indexStart + indexCount && j < Indices.Length; j++)
+            {
+                int idx = Indices[j];
+                if (idx < minIndex) minIndex = idx;
+                if (idx > maxIndex) maxIndex = idx;
+            }
+        }
+
+        if (minIndex == int.MaxValue || maxIndex == int.MinValue)
+        {
+            return this; // Return original if no valid indices
+        }
+
+        // Create vertex mapping (old index -> new index)
+        int vertexCount = maxIndex - minIndex + 1;
+
+        // Copy vertices
+        if (Vertices != null && Vertices.Length > 0)
+        {
+            result.Vertices = new float[vertexCount * 3];
+            for (int i = 0; i < vertexCount && (minIndex + i) * 3 + 2 < Vertices.Length; i++)
+            {
+                result.Vertices[i * 3] = Vertices[(minIndex + i) * 3];
+                result.Vertices[i * 3 + 1] = Vertices[(minIndex + i) * 3 + 1];
+                result.Vertices[i * 3 + 2] = Vertices[(minIndex + i) * 3 + 2];
+            }
+        }
+
+        // Copy normals
+        if (Normals != null && Normals.Length > 0)
+        {
+            result.Normals = new float[vertexCount * 3];
+            for (int i = 0; i < vertexCount && (minIndex + i) * 3 + 2 < Normals.Length; i++)
+            {
+                result.Normals[i * 3] = Normals[(minIndex + i) * 3];
+                result.Normals[i * 3 + 1] = Normals[(minIndex + i) * 3 + 1];
+                result.Normals[i * 3 + 2] = Normals[(minIndex + i) * 3 + 2];
+            }
+        }
+
+        // Copy tangents
+        if (Tangents != null && Tangents.Length > 0)
+        {
+            int tangentDim = Tangents.Length / (Vertices.Length / 3);
+            result.Tangents = new float[vertexCount * tangentDim];
+            for (int i = 0; i < vertexCount && (minIndex + i) * tangentDim + tangentDim - 1 < Tangents.Length; i++)
+            {
+                for (int d = 0; d < tangentDim; d++)
+                {
+                    result.Tangents[i * tangentDim + d] = Tangents[(minIndex + i) * tangentDim + d];
+                }
+            }
+        }
+
+        // Copy colors
+        if (Colors != null && Colors.Length > 0)
+        {
+            int colorDim = Colors.Length / (Vertices.Length / 3);
+            result.Colors = new float[vertexCount * colorDim];
+            for (int i = 0; i < vertexCount && (minIndex + i) * colorDim + colorDim - 1 < Colors.Length; i++)
+            {
+                for (int d = 0; d < colorDim; d++)
+                {
+                    result.Colors[i * colorDim + d] = Colors[(minIndex + i) * colorDim + d];
+                }
+            }
+        }
+
+        // Copy UVs
+        if (UVs != null && UVs.Length > 0)
+        {
+            result.UVs = new float[UVs.Length][];
+            for (int uvIdx = 0; uvIdx < UVs.Length; uvIdx++)
+            {
+                if (UVs[uvIdx] != null && UVs[uvIdx].Length > 0)
+                {
+                    int uvDim = UVs[uvIdx].Length / (Vertices.Length / 3);
+                    result.UVs[uvIdx] = new float[vertexCount * uvDim];
+                    for (int i = 0; i < vertexCount && (minIndex + i) * uvDim + uvDim - 1 < UVs[uvIdx].Length; i++)
+                    {
+                        for (int d = 0; d < uvDim; d++)
+                        {
+                            result.UVs[uvIdx][i * uvDim + d] = UVs[uvIdx][(minIndex + i) * uvDim + d];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Copy and remap indices
+        for (int i = firstSubMesh; i < Math.Min(firstSubMesh + subMeshCount, SubMeshes.Count); i++)
+        {
+            var subMesh = SubMeshes[i];
+            int indexStart = (int)subMesh.IndexStart;
+            int indexCount = (int)subMesh.IndexCount;
+
+            for (int j = indexStart; j < indexStart + indexCount && j < Indices.Length; j++)
+            {
+                newIndices.Add((ushort)(Indices[j] - minIndex));
+            }
+        }
+
+        result.Indices = newIndices.ToArray();
+        result.Channels = Channels;
+
+        return result;
     }
 
     private void Read(AssetsFileInstance fileInst, AssetTypeValueField baseField, UnityVersion version)
     {
         ReadIndicesData(baseField);
         ReadChannels(baseField);
+        ReadSubMeshes(baseField);
         ReadVertexData(fileInst, baseField, version);
+    }
+
+    private void ReadSubMeshes(AssetTypeValueField baseField)
+    {
+        var subMeshesField = baseField["m_SubMeshes.Array"];
+        if (subMeshesField == null || subMeshesField.IsDummy)
+            return;
+
+        SubMeshes = new List<SubMesh>();
+        foreach (var subMeshField in subMeshesField)
+        {
+            var subMesh = new SubMesh
+            {
+                FirstByte = subMeshField["firstByte"].AsUInt,
+                IndexCount = subMeshField["indexCount"].AsUInt,
+                Topology = subMeshField["topology"].AsInt,
+                FirstVertex = subMeshField["firstVertex"].AsUInt,
+                VertexCount = subMeshField["vertexCount"].AsUInt
+            };
+
+            // Calculate index start from firstByte (indices are 2 bytes each)
+            subMesh.IndexStart = subMesh.FirstByte / 2;
+
+            SubMeshes.Add(subMesh);
+        }
     }
 
     private void ReadIndicesData(AssetTypeValueField baseField)
@@ -478,4 +639,17 @@ public class MeshObj
                 throw new Exception($"Unknown format {format}");
         }
     }
+}
+
+/// <summary>
+/// Represents a submesh within a mesh. Used for combined/batched meshes.
+/// </summary>
+public class SubMesh
+{
+    public uint FirstByte { get; set; }
+    public uint IndexCount { get; set; }
+    public int Topology { get; set; }
+    public uint FirstVertex { get; set; }
+    public uint VertexCount { get; set; }
+    public uint IndexStart { get; set; } // Calculated from FirstByte
 }
