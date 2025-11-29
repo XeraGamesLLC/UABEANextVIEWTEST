@@ -76,8 +76,21 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
     }
 
+    /// <summary>
+    /// Marks the scene as dirty, forcing a rebuild of the mesh buffers on the next render.
+    /// </summary>
+    public void MarkDirty()
+    {
+        _dirtyScene = true;
+        InvalidateVisual();
+    }
+
     // Event for selection changes
     public event EventHandler<SceneObject?>? SelectionChanged;
+
+    // Event for duplicate/delete requests (to connect to view model)
+    public event EventHandler? DuplicateRequested;
+    public event EventHandler? DeleteRequested;
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     private struct Vertex
@@ -312,6 +325,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         _pressedKeys.Add(e.Key);
+
+        // Handle keyboard shortcuts
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.D)
+        {
+            DuplicateRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete)
+        {
+            DeleteRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
     }
 
     private void OnKeyUp(object? sender, KeyEventArgs e)
