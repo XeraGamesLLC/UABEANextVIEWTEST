@@ -753,20 +753,21 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             var vertices = new Vertex[vertexCount];
             for (int i = 0; i < vertexCount; i++)
             {
-                // Unity uses left-handed coordinate system, flip X for mirror correction
+                // Unity uses left-handed coordinate system, OpenGL uses right-handed
+                // Negate Z to convert coordinate systems
                 var pos = new Vector3(
-                    -mesh.Vertices[i * 3],      // Negate X to fix sideways inversion
+                    mesh.Vertices[i * 3],
                     mesh.Vertices[i * 3 + 1],
-                    mesh.Vertices[i * 3 + 2]
+                    -mesh.Vertices[i * 3 + 2]   // Negate Z for coordinate system conversion
                 );
 
                 var normal = Vector3.UnitY;
                 if (mesh.Normals != null && mesh.Normals.Length >= (i + 1) * 3)
                 {
                     normal = new Vector3(
-                        -mesh.Normals[i * 3],   // Negate X for normals too
+                        mesh.Normals[i * 3],
                         mesh.Normals[i * 3 + 1],
-                        mesh.Normals[i * 3 + 2]
+                        -mesh.Normals[i * 3 + 2]   // Negate Z for normals too
                     );
                 }
 
@@ -812,11 +813,23 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * vertexSize), ptr, BufferUsageARB.StaticDraw);
             }
 
-            // Index buffer
-            _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, buffers.Ebo);
-            fixed (ushort* ptr = mesh.Indices)
+            // Index buffer - reverse winding order for coordinate system conversion
+            // When we negate Z, triangle winding becomes reversed, so swap indices to fix
+            var indices = new ushort[mesh.Indices.Length];
+            for (int i = 0; i < mesh.Indices.Length; i += 3)
             {
-                _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(mesh.Indices.Length * sizeof(ushort)), ptr, BufferUsageARB.StaticDraw);
+                if (i + 2 < mesh.Indices.Length)
+                {
+                    indices[i] = mesh.Indices[i];
+                    indices[i + 1] = mesh.Indices[i + 2];  // Swap second and third
+                    indices[i + 2] = mesh.Indices[i + 1];
+                }
+            }
+
+            _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, buffers.Ebo);
+            fixed (ushort* ptr = indices)
+            {
+                _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(ushort)), ptr, BufferUsageARB.StaticDraw);
             }
 
             // Vertex attributes (Position=0, Normal=12, TexCoord=24, LightmapUV=32)
@@ -897,8 +910,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             BuildSceneBuffers();
         }
 
-        // Clear - Dark blue cyber theme background
-        _gl.ClearColor(0.04f, 0.04f, 0.06f, 1f);
+        // Clear - Pure black background (Xera Cyber theme)
+        _gl.ClearColor(0f, 0f, 0f, 1f);
         _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
         _gl.Viewport(0, 0, (uint)Bounds.Width, (uint)Bounds.Height);
 
@@ -938,8 +951,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.UniformMatrix4(projLoc, 1, false, &projection.M11);
         _gl.UniformMatrix4(viewLoc, 1, false, &view.M11);
         _gl.Uniform1(gridSizeLoc, 1f);
-        // Blue-tinted grid to match cyber theme
-        _gl.Uniform3(gridColorLoc, 0.0f, 0.4f, 0.6f);
+        // Cyan grid to match Xera Cyber theme (#00d9ff)
+        _gl.Uniform3(gridColorLoc, 0.0f, 0.85f, 1.0f);
 
         _gl.BindVertexArray(_gridVao);
         _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
@@ -974,11 +987,22 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _gl.Uniform1(textureLoc, 0);
         _gl.Uniform1(lightmapLoc, 1);
 
+        // Z-flip matrix for Unity to OpenGL coordinate conversion
+        var zFlip = new Matrix4x4(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, -1, 0,
+            0, 0, 0, 1
+        );
+
         foreach (var obj in SceneData.AllObjects)
         {
             if (!_objectBuffers.TryGetValue(obj, out var buffers)) continue;
 
-            var model = obj.WorldMatrix;
+            // Apply Z-flip to world matrix for coordinate system conversion
+            var model = obj.WorldMatrix * zFlip;
+            // Also flip the Z translation
+            model.M43 = -obj.WorldMatrix.M43;
             _gl.UniformMatrix4(modelLoc, 1, false, &model.M11);
             _gl.Uniform1(hasTextureLoc, buffers.HasTexture ? 1 : 0);
             _gl.Uniform1(hasLightmapLoc, buffers.HasLightmap ? 1 : 0);

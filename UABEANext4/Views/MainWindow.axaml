@@ -23,16 +23,18 @@
   </Design.DataContext>
 
   <Panel Margin="{Binding #MainWindowName.OffScreenMargin}">
-    <Panel Height="30" HorizontalAlignment="Center" VerticalAlignment="Top">
+    <!-- Draggable title bar area -->
+    <Panel Name="TitleBar" Height="30" HorizontalAlignment="Stretch" VerticalAlignment="Top" Background="Transparent">
       <Label Content="{Binding Path=Title, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=Window}}"
              Margin="4,8,4,0"
              FontSize="14"
              FontWeight="Normal"
              FontFamily="Consolas,Monospace,Courier,DejaVu Sans Mono,Roboto Mono"
              VerticalAlignment="Center"
+             HorizontalAlignment="Center"
              VerticalContentAlignment="Center"
              IsHitTestVisible="False"
-             IsVisible="{Binding UsesChrome}"/>
+             Foreground="#00d9ff"/>
     </Panel>
     <Panel Margin="0,0,0,0">
       <v:MainView/>

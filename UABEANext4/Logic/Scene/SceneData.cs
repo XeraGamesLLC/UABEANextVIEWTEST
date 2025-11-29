@@ -552,6 +552,27 @@ public class SceneData
         try
         {
             var texture = TextureFile.ReadTextureFile(texBf);
+
+            // Validate texture properties before attempting decode
+            if (texture == null)
+            {
+                Log($"LoadTexture: Failed to read texture file for '{sceneObj.Name}'");
+                return;
+            }
+
+            if (texture.m_Width <= 0 || texture.m_Height <= 0)
+            {
+                Log($"LoadTexture: Invalid texture dimensions for '{sceneObj.Name}': {texture.m_Width}x{texture.m_Height}");
+                return;
+            }
+
+            // Skip unsupported or problematic texture formats
+            if (texture.m_TextureFormat <= 0)
+            {
+                Log($"LoadTexture: Unsupported texture format for '{sceneObj.Name}'");
+                return;
+            }
+
             var encData = texture.FillPictureData(texAsset.FileInstance);
 
             if (encData == null || encData.Length == 0)
@@ -560,7 +581,17 @@ public class SceneData
                 return;
             }
 
-            var decData = texture.DecodeTextureRaw(encData);
+            // Try to decode - some formats may not be supported
+            byte[]? decData = null;
+            try
+            {
+                decData = texture.DecodeTextureRaw(encData);
+            }
+            catch (Exception decodeEx)
+            {
+                Log($"LoadTexture: Decode failed for '{texture.m_Name}' (format {texture.m_TextureFormat}): {decodeEx.Message}");
+                return;
+            }
 
             if (decData != null && decData.Length > 0)
             {
@@ -576,7 +607,7 @@ public class SceneData
         }
         catch (Exception ex)
         {
-            Log($"LoadTexture: Exception decoding texture for '{sceneObj.Name}': {ex.Message}");
+            Log($"LoadTexture: Exception for '{sceneObj.Name}': {ex.Message}");
         }
     }
 
