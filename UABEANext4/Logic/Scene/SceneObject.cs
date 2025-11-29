@@ -1,5 +1,6 @@
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using UABEANext4.AssetWorkspace;
