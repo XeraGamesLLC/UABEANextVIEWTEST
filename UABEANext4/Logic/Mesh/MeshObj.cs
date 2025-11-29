@@ -7,6 +7,18 @@ using System.Linq;
 
 namespace UABEANext4.Logic.Mesh;
 
+/// <summary>
+/// Information about a submesh within a combined mesh.
+/// </summary>
+public class SubMeshInfo
+{
+    public uint FirstByte { get; set; }
+    public uint IndexCount { get; set; }
+    public int Topology { get; set; } // 0 = Triangles, 1 = Quads, 2 = Lines, etc.
+    public uint FirstVertex { get; set; }
+    public uint VertexCount { get; set; }
+}
+
 // based on https://github.com/Perfare/AssetStudio/blob/master/AssetStudio/Classes/Mesh.cs
 // this is not in a plugin due to being needed by the previewer, plus it's shared by multiple plugins
 public class MeshObj
@@ -19,6 +31,9 @@ public class MeshObj
     public float[] Colors;
     public float[][] UVs;
 
+    // Submesh information for combined meshes
+    public List<SubMeshInfo> SubMeshes;
+
     public MeshObj()
     {
         Indices = [];
@@ -28,6 +43,7 @@ public class MeshObj
         Tangents = [];
         Colors = [];
         UVs = [];
+        SubMeshes = [];
     }
 
     public MeshObj(AssetsFileInstance fileInst, AssetTypeValueField baseField, UnityVersion version)
@@ -39,26 +55,106 @@ public class MeshObj
         Tangents = [];
         Colors = [];
         UVs = [];
+        SubMeshes = [];
 
         Read(fileInst, baseField, version);
     }
 
     private void Read(AssetsFileInstance fileInst, AssetTypeValueField baseField, UnityVersion version)
     {
+        ReadSubMeshes(baseField);
         ReadIndicesData(baseField);
         ReadChannels(baseField);
         ReadVertexData(fileInst, baseField, version);
     }
 
+    private void ReadSubMeshes(AssetTypeValueField baseField)
+    {
+        var subMeshesField = baseField["m_SubMeshes.Array"];
+        if (subMeshesField.IsDummy) return;
+
+        foreach (var subMesh in subMeshesField)
+        {
+            var info = new SubMeshInfo
+            {
+                FirstByte = subMesh["firstByte"].AsUInt,
+                IndexCount = subMesh["indexCount"].AsUInt,
+                Topology = subMesh["topology"].AsInt,
+                FirstVertex = subMesh["firstVertex"].AsUInt,
+                VertexCount = subMesh["vertexCount"].AsUInt
+            };
+            SubMeshes.Add(info);
+        }
+    }
+
     private void ReadIndicesData(AssetTypeValueField baseField)
     {
         var indicesField = baseField["m_IndexBuffer.Array"].AsByteArray;
-        var ushortArray = new ushort[indicesField.Length / 2];
-        for (var i = 0; i < indicesField.Length; i += 2)
+
+        // Check if indices are 32-bit (for large meshes) by looking at index format
+        var indexFormatField = baseField["m_IndexFormat"];
+        bool is32Bit = !indexFormatField.IsDummy && indexFormatField.AsInt == 1;
+
+        if (is32Bit)
         {
-            ushortArray[i / 2] = (ushort)(indicesField[i + 1] << 8 | indicesField[i]);
+            // 32-bit indices - convert to ushort (may lose precision for very large meshes)
+            var uintArray = new uint[indicesField.Length / 4];
+            for (var i = 0; i < indicesField.Length; i += 4)
+            {
+                uintArray[i / 4] = (uint)(indicesField[i] | indicesField[i + 1] << 8 |
+                                         indicesField[i + 2] << 16 | indicesField[i + 3] << 24);
+            }
+            // Convert to ushort (clamping to prevent overflow)
+            Indices = new ushort[uintArray.Length];
+            for (var i = 0; i < uintArray.Length; i++)
+            {
+                Indices[i] = (ushort)Math.Min(uintArray[i], ushort.MaxValue);
+            }
         }
-        Indices = ushortArray;
+        else
+        {
+            // 16-bit indices (standard)
+            var ushortArray = new ushort[indicesField.Length / 2];
+            for (var i = 0; i < indicesField.Length; i += 2)
+            {
+                ushortArray[i / 2] = (ushort)(indicesField[i + 1] << 8 | indicesField[i]);
+            }
+            Indices = ushortArray;
+        }
+
+        // If we have submeshes, filter to only triangle submeshes
+        if (SubMeshes.Count > 0)
+        {
+            FilterToTriangleSubmeshes(is32Bit);
+        }
+    }
+
+    private void FilterToTriangleSubmeshes(bool is32Bit)
+    {
+        // Topology: 0 = Triangles, 1 = Quads, 2 = Lines, 3 = LineStrip, 4 = Points
+        // We only want triangles (topology 0)
+        var triangleIndices = new List<ushort>();
+        int bytesPerIndex = is32Bit ? 4 : 2;
+
+        foreach (var subMesh in SubMeshes)
+        {
+            // Only include triangle submeshes (topology 0)
+            if (subMesh.Topology == 0)
+            {
+                int startIndex = (int)(subMesh.FirstByte / bytesPerIndex);
+                int count = (int)subMesh.IndexCount;
+
+                for (int i = 0; i < count && startIndex + i < Indices.Length; i++)
+                {
+                    triangleIndices.Add(Indices[startIndex + i]);
+                }
+            }
+        }
+
+        if (triangleIndices.Count > 0)
+        {
+            Indices = triangleIndices.ToArray();
+        }
     }
 
     private void ReadChannels(AssetTypeValueField baseField)
