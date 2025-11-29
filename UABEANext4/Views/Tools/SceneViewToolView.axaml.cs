@@ -1,6 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Interactivity;
-using UABEANext4.Controls.SceneView;
 using UABEANext4.ViewModels.Tools;
 using System;
 
@@ -25,22 +23,6 @@ public partial class SceneViewToolView : UserControl
         {
             // Connect the reset camera action to the control
             vm.ResetCameraAction = () => sceneViewControl.ResetCamera();
-        }
-    }
-
-    private void OnLoadSceneClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is SceneViewToolViewModel vm)
-        {
-            vm.LoadSceneCommand.Execute(null);
-        }
-    }
-
-    private void OnResetCameraClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is SceneViewToolViewModel vm)
-        {
-            vm.ResetCameraCommand.Execute(null);
         }
     }
 

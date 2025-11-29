@@ -12,20 +12,53 @@
     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4" Spacing="4">
       <TextBlock VerticalAlignment="Center" Text="Scene:" Margin="0,0,4,0" />
       <TextBox Text="{Binding SceneName}" Width="100" ToolTip.Tip="Scene name to load (e.g., level0)" />
-      <Button x:Name="loadSceneButton" Content="Load Scene" Click="OnLoadSceneClick" ToolTip.Tip="Load the scene from the selected assets file" />
+      <Button x:Name="loadSceneButton" Content="Load Scene" Command="{Binding LoadSceneCommand}" ToolTip.Tip="Load the scene from the selected assets file" />
       <CheckBox IsChecked="{Binding AutoLoad}" Content="Auto" VerticalAlignment="Center" ToolTip.Tip="Automatically load the scene when a file is opened" Margin="4,0" />
       <Separator Width="1" Margin="4,0" />
-      <Button x:Name="resetCameraButton" Content="Reset Camera" Click="OnResetCameraClick" ToolTip.Tip="Reset camera to default position" />
+      <Button x:Name="resetCameraButton" Content="Reset Camera" Command="{Binding ResetCameraCommand}" ToolTip.Tip="Reset camera to default position" />
       <Separator Width="1" Margin="4,0" />
       <TextBlock VerticalAlignment="Center" Text="Controls: " FontWeight="SemiBold" />
       <TextBlock VerticalAlignment="Center" Text="Right-click + WASD, Scroll to zoom" Foreground="Gray" />
     </StackPanel>
 
-    <!-- Scene View -->
-    <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" Margin="4,0,4,4">
-      <sceneview:SceneViewControl x:Name="sceneViewControl"
-                                   SceneData="{Binding SceneData}" />
-    </Border>
+    <!-- Tab Control for Scene View and Log -->
+    <TabControl Grid.Row="1" Margin="4,0,4,4">
+      <TabItem Header="Scene">
+        <Border BorderBrush="Gray" BorderThickness="1">
+          <sceneview:SceneViewControl x:Name="sceneViewControl"
+                                       SceneData="{Binding SceneData}" />
+        </Border>
+      </TabItem>
+      <TabItem Header="Log">
+        <Grid RowDefinitions="Auto,*">
+          <!-- Log Toolbar -->
+          <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4" Spacing="4">
+            <Button Content="Clear Log" Command="{Binding ClearLogCommand}" ToolTip.Tip="Clear all log entries" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding LogEntries.Count, StringFormat='Entries: {0}'}" Foreground="Gray" Margin="8,0,0,0" />
+          </StackPanel>
+          <!-- Log List -->
+          <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" Background="#1e1e1e">
+            <ListBox ItemsSource="{Binding LogEntries}"
+                     Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding FormattedMessage}"
+                             FontFamily="Consolas, Courier New, monospace"
+                             FontSize="12">
+                    <TextBlock.Foreground>
+                      <MultiBinding Converter="{x:Static tools:LogLevelToColorConverter.Instance}">
+                        <Binding Path="Level" />
+                      </MultiBinding>
+                    </TextBlock.Foreground>
+                  </TextBlock>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+        </Grid>
+      </TabItem>
+    </TabControl>
 
     <!-- Status Bar -->
     <Border Grid.Row="2" Background="#2d2d30" Padding="4,2">
