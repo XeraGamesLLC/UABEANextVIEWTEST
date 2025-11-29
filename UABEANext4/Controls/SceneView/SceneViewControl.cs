@@ -69,14 +69,14 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         {
             SetAndRaise(SceneDataProperty, ref _sceneData, value);
             _dirtyScene = true;
-            InvalidateVisual();
+            RequestNextFrameRendering();
         }
     }
 
     public void MarkDirty()
     {
         _dirtyScene = true;
-        InvalidateVisual();
+        RequestNextFrameRendering();
     }
 
     public void PushUndoAction(SceneUndoAction action)
@@ -107,7 +107,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         var action = _undoStack.Pop();
         action.Undo();
         _redoStack.Push(action);
-        InvalidateVisual();
+        RequestNextFrameRendering();
         return true;
     }
 
@@ -119,7 +119,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         var action = _redoStack.Pop();
         action.Redo();
         _undoStack.Push(action);
-        InvalidateVisual();
+        RequestNextFrameRendering();
         return true;
     }
 
@@ -183,7 +183,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         _baseMoveSpeed = 10f;
         _moveSpeed = 10f;
         UpdateCameraVectors();
-        InvalidateVisual();
+        RequestNextFrameRendering();
     }
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
