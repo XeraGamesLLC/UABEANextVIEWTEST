@@ -45,9 +45,12 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
 
     // Object interaction
     private SceneObject? _selectedObject;
+    private SceneObject? _hoveredObject;
     private bool _isDragging = false;
+    private bool _isDraggingObject = false; // Direct object dragging (not gizmo)
     private Vector3 _dragStartPos;
     private Vector3 _dragPlaneNormal;
+    private Vector3 _dragOffset; // Offset from object center to click point
     private int _activeAxis = -1; // 0=X, 1=Y, 2=Z, -1=none
 
     // Frame timing
@@ -160,10 +163,37 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                     case 1: _dragPlaneNormal = Vector3.UnitZ; break;
                     case 2: _dragPlaneNormal = Vector3.UnitX; break;
                 }
+                e.Pointer.Capture(this);
+            }
+            // Check if clicking on an object to drag it directly
+            else if (_hoveredObject != null)
+            {
+                // Select the hovered object
+                if (_selectedObject != null)
+                {
+                    _selectedObject.IsSelected = false;
+                }
+                _selectedObject = _hoveredObject;
+                _selectedObject.IsSelected = true;
+                SelectionChanged?.Invoke(this, _selectedObject);
+
+                // Start dragging the object
+                _isDraggingObject = true;
+                _dragStartPos = _selectedObject.LocalPosition;
+
+                // Use a horizontal plane (XZ) at the object's Y position for dragging
+                _dragPlaneNormal = Vector3.UnitY;
+
+                // Calculate drag offset so object doesn't snap to cursor
+                var ray = GetMouseRay(point.Position);
+                var hitPoint = GetPlaneIntersection(ray, _dragStartPos, _dragPlaneNormal);
+                _dragOffset = _dragStartPos - hitPoint;
+
+                e.Pointer.Capture(this);
             }
             else
             {
-                // Object picking
+                // Object picking (clicking on empty space deselects)
                 PickObject(point.Position);
             }
         }
@@ -179,6 +209,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         else if (e.InitialPressMouseButton == MouseButton.Left)
         {
             _isDragging = false;
+            _isDraggingObject = false;
+            e.Pointer.Capture(null);
         }
     }
 
@@ -203,7 +235,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
         else if (_isDragging && _selectedObject != null && _activeAxis >= 0)
         {
-            // Move object along axis
+            // Move object along gizmo axis
             var ray = GetMouseRay(currentPos);
             var delta = GetDragDelta(ray, _dragPlaneNormal);
 
@@ -219,13 +251,52 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             _selectedObject.ComputeWorldMatrix();
             _selectedObject.ComputeBounds();
         }
+        else if (_isDraggingObject && _selectedObject != null)
+        {
+            // Move object freely on horizontal plane
+            var ray = GetMouseRay(currentPos);
+            var hitPoint = GetPlaneIntersection(ray, _dragStartPos, _dragPlaneNormal);
+
+            // Apply offset so object doesn't snap to cursor
+            var newPos = hitPoint + _dragOffset;
+            // Keep original Y position (drag on XZ plane)
+            newPos.Y = _dragStartPos.Y;
+
+            _selectedObject.LocalPosition = newPos;
+            _selectedObject.ComputeWorldMatrix();
+            _selectedObject.ComputeBounds();
+        }
         else
         {
-            // Check for gizmo hover
+            var ray = GetMouseRay(currentPos);
+
+            // Check for gizmo hover first
             if (_selectedObject != null)
             {
-                var ray = GetMouseRay(currentPos);
                 _activeAxis = GetHoveredGizmoAxis(ray, _selectedObject.LocalPosition);
+            }
+
+            // Check for object hover (for hand cursor)
+            if (_activeAxis < 0)
+            {
+                var previousHover = _hoveredObject;
+                _hoveredObject = SceneData?.PickObject(ray.origin, ray.direction);
+
+                // Update cursor based on hover state
+                if (_hoveredObject != null)
+                {
+                    Cursor = new Cursor(StandardCursorType.Hand);
+                }
+                else if (previousHover != null)
+                {
+                    Cursor = Cursor.Default;
+                }
+            }
+            else
+            {
+                // Gizmo is hovered, show move cursor
+                _hoveredObject = null;
+                Cursor = new Cursor(StandardCursorType.SizeAll);
             }
         }
 
@@ -397,6 +468,24 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         }
 
         return Vector3.Zero;
+    }
+
+    private Vector3 GetPlaneIntersection((Vector3 origin, Vector3 direction) ray, Vector3 planePoint, Vector3 planeNormal)
+    {
+        // Intersect ray with plane defined by point and normal
+        var d = Vector3.Dot(planePoint, planeNormal);
+        var denom = Vector3.Dot(ray.direction, planeNormal);
+
+        if (MathF.Abs(denom) > 0.0001f)
+        {
+            var t = (d - Vector3.Dot(ray.origin, planeNormal)) / denom;
+            if (t > 0)
+            {
+                return ray.origin + ray.direction * t;
+            }
+        }
+
+        return planePoint;
     }
 
     #endregion
