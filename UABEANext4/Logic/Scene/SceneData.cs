@@ -117,13 +117,28 @@ public class SceneData
             }
         }
 
-        // Third pass: Load meshes and materials for objects with MeshFilter
+        // Third pass: Load meshes and materials for objects with MeshFilter/MeshCollider
         var meshFilterInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshFilter).ToList();
         var meshRendererInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshRenderer).ToList();
+        var meshColliderInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshCollider).ToList();
 
-        // Map GameObject PathId to MeshFilter/MeshRenderer
+        // Map GameObject PathId to MeshFilter/MeshRenderer/MeshCollider
         var goToMeshFilter = new Dictionary<long, AssetFileInfo>();
         var goToMeshRenderer = new Dictionary<long, AssetFileInfo>();
+        var goToMeshCollider = new Dictionary<long, AssetFileInfo>();
+
+        // Track static flags for GameObjects (used to prefer MeshCollider mesh for static objects)
+        var goStaticFlags = new Dictionary<long, uint>();
+        foreach (var goInfo in goInfos)
+        {
+            var goBf = _workspace.GetBaseField(fileInst, goInfo.PathId);
+            if (goBf != null)
+            {
+                // m_StaticEditorFlags: non-zero means the object has some static flags set
+                var staticFlags = goBf["m_StaticEditorFlags"].AsUInt;
+                goStaticFlags[goInfo.PathId] = staticFlags;
+            }
+        }
 
         foreach (var mfInfo in meshFilterInfos)
         {
@@ -143,41 +158,94 @@ public class SceneData
             goToMeshRenderer[goPathId] = mrInfo;
         }
 
+        foreach (var mcInfo in meshColliderInfos)
+        {
+            var mcBf = _workspace.GetBaseField(fileInst, mcInfo.PathId);
+            if (mcBf == null) continue;
+
+            var goPathId = mcBf["m_GameObject"]["m_PathID"].AsLong;
+            goToMeshCollider[goPathId] = mcInfo;
+        }
+
         // Load mesh data for each scene object
+        // For static objects, prefer MeshCollider's mesh (if available) over MeshFilter's mesh
+        // This is important because static objects often use simplified collision meshes for accurate collision representation
         foreach (var sceneObj in AllObjects)
         {
             var goPathId = tfmToGoMap.GetValueOrDefault(sceneObj.PathId, 0);
             if (goPathId == 0) continue;
 
-            if (goToMeshFilter.TryGetValue(goPathId, out var mfInfo))
+            // Check if this object is static (has any static flags set)
+            var isStatic = goStaticFlags.TryGetValue(goPathId, out var staticFlags) && staticFlags != 0;
+
+            // For static objects, try to use MeshCollider's mesh first
+            bool meshLoaded = false;
+            if (isStatic && goToMeshCollider.TryGetValue(goPathId, out var mcInfo))
             {
-                var mfBf = _workspace.GetBaseField(fileInst, mfInfo.PathId);
-                if (mfBf == null) continue;
-
-                var meshPtr = mfBf["m_Mesh"];
-                var meshPathId = meshPtr["m_PathID"].AsLong;
-                var meshFileId = meshPtr["m_FileID"].AsInt;
-
-                if (meshPathId != 0)
+                var mcBf = _workspace.GetBaseField(fileInst, mcInfo.PathId);
+                if (mcBf != null)
                 {
-                    try
-                    {
-                        var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
-                        if (meshBf != null)
-                        {
-                            var version = fileInst.file.Metadata.UnityVersion;
-                            sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+                    var meshPtr = mcBf["m_Mesh"];
+                    var meshPathId = meshPtr["m_PathID"].AsLong;
+                    var meshFileId = meshPtr["m_FileID"].AsInt;
 
-                            // Get UVs if available
-                            if (sceneObj.Mesh.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                    if (meshPathId != 0)
+                    {
+                        try
+                        {
+                            var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                            if (meshBf != null)
                             {
-                                sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                var version = fileInst.file.Metadata.UnityVersion;
+                                sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                // Get UVs if available (though collision meshes typically don't have UVs)
+                                if (sceneObj.Mesh.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                {
+                                    sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                }
+                                meshLoaded = true;
                             }
                         }
+                        catch
+                        {
+                            // MeshCollider mesh loading failed, will fall back to MeshFilter
+                        }
                     }
-                    catch
+                }
+            }
+
+            // Fall back to MeshFilter's mesh for non-static objects or if MeshCollider loading failed
+            if (!meshLoaded && goToMeshFilter.TryGetValue(goPathId, out var mfInfo))
+            {
+                var mfBf = _workspace.GetBaseField(fileInst, mfInfo.PathId);
+                if (mfBf != null)
+                {
+                    var meshPtr = mfBf["m_Mesh"];
+                    var meshPathId = meshPtr["m_PathID"].AsLong;
+                    var meshFileId = meshPtr["m_FileID"].AsInt;
+
+                    if (meshPathId != 0)
                     {
-                        // Mesh loading failed, skip
+                        try
+                        {
+                            var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                            if (meshBf != null)
+                            {
+                                var version = fileInst.file.Metadata.UnityVersion;
+                                sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                // Get UVs if available
+                                if (sceneObj.Mesh.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                {
+                                    sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Mesh loading failed, skip
+                        }
                     }
                 }
             }
