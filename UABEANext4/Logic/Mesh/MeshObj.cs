@@ -75,6 +75,10 @@ public class MeshObj
     private List<int> GetStreamLengths(UnityVersion version)
     {
         var streamLengths = new List<int>();
+        if (Channels.Count == 0)
+        {
+            return streamLengths;
+        }
         var streamCount = Channels.Max(c => c.stream) + 1;
         for (var i = 0; i < streamCount; i++)
         {
@@ -298,23 +302,23 @@ public class MeshObj
                 else
                     floatItems = ConvertFloatArray(data, dimension, vertexFormat);
 
-                SetCorrectArray(intItems!, floatItems!, chnIdx, version);
+                SetCorrectArray(intItems, floatItems, chnIdx, version);
             }
             startPos += streamLengths[strIdx] * vertexCount;
         }
     }
 
-    private void SetCorrectArray(int[] intItems, float[] floatItems, int channelIndex, UnityVersion version)
+    private void SetCorrectArray(int[]? intItems, float[]? floatItems, int channelIndex, UnityVersion version)
     {
         if (version.major >= 2018)
         {
             var channelType = (ChannelTypeV3)channelIndex;
             switch (channelType)
             {
-                case ChannelTypeV3.Vertex: Vertices = floatItems; break;
-                case ChannelTypeV3.Normal: Normals = floatItems; break;
-                case ChannelTypeV3.Tangent: Tangents = floatItems; break;
-                case ChannelTypeV3.Color: Colors = floatItems; break;
+                case ChannelTypeV3.Vertex: if (floatItems != null) Vertices = floatItems; break;
+                case ChannelTypeV3.Normal: if (floatItems != null) Normals = floatItems; break;
+                case ChannelTypeV3.Tangent: if (floatItems != null) Tangents = floatItems; break;
+                case ChannelTypeV3.Color: if (floatItems != null) Colors = floatItems; break;
                 case ChannelTypeV3.TexCoord0:
                 case ChannelTypeV3.TexCoord1:
                 case ChannelTypeV3.TexCoord2:
@@ -324,11 +328,14 @@ public class MeshObj
                 case ChannelTypeV3.TexCoord6:
                 case ChannelTypeV3.TexCoord7:
                 {
-                    if (UVs.Length == 0)
+                    if (floatItems != null)
                     {
-                        UVs = new float[8][];
+                        if (UVs.Length == 0)
+                        {
+                            UVs = new float[8][];
+                        }
+                        UVs[(int)channelType - (int)ChannelTypeV3.TexCoord0] = floatItems;
                     }
-                    UVs[(int)channelType - (int)ChannelTypeV3.TexCoord0] = floatItems;
                     break;
                 }
                 case ChannelTypeV3.BlendWeight:
@@ -344,22 +351,25 @@ public class MeshObj
             var channelType = (ChannelTypeV2)channelIndex;
             switch (channelType)
             {
-                case ChannelTypeV2.Vertex: Vertices = floatItems; break;
-                case ChannelTypeV2.Normal: Normals = floatItems; break;
-                case ChannelTypeV2.Color: Colors = floatItems; break;
+                case ChannelTypeV2.Vertex: if (floatItems != null) Vertices = floatItems; break;
+                case ChannelTypeV2.Normal: if (floatItems != null) Normals = floatItems; break;
+                case ChannelTypeV2.Color: if (floatItems != null) Colors = floatItems; break;
                 case ChannelTypeV2.TexCoord0:
                 case ChannelTypeV2.TexCoord1:
                 case ChannelTypeV2.TexCoord2:
                 case ChannelTypeV2.TexCoord3:
                 {
-                    if (UVs.Length == 0)
+                    if (floatItems != null)
                     {
-                        UVs = new float[4][];
+                        if (UVs.Length == 0)
+                        {
+                            UVs = new float[4][];
+                        }
+                        UVs[(int)channelType - (int)ChannelTypeV2.TexCoord0] = floatItems;
                     }
-                    UVs[(int)channelType - (int)ChannelTypeV2.TexCoord0] = floatItems;
                     break;
                 }
-                case ChannelTypeV2.Tangent: Tangents = floatItems; break;
+                case ChannelTypeV2.Tangent: if (floatItems != null) Tangents = floatItems; break;
             }
         }
     }

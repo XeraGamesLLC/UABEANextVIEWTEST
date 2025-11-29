@@ -20,24 +20,49 @@ public class SceneData
 
     private readonly Workspace _workspace;
     private readonly Dictionary<long, SceneObject> _pathIdToObject = new();
+    private readonly Action<string>? _logAction;
 
-    public SceneData(Workspace workspace)
+    public SceneData(Workspace workspace, Action<string>? logAction = null)
     {
         _workspace = workspace;
+        _logAction = logAction;
+    }
+
+    private void Log(string message)
+    {
+        _logAction?.Invoke(message);
     }
 
     public void LoadFromFile(AssetsFileInstance fileInst)
     {
+        if (fileInst == null)
+        {
+            Log("LoadFromFile: fileInst is null");
+            throw new ArgumentNullException(nameof(fileInst), "File instance cannot be null");
+        }
+
+        if (fileInst.file == null)
+        {
+            Log("LoadFromFile: fileInst.file is null");
+            throw new ArgumentException("File instance has null file", nameof(fileInst));
+        }
+
         RootObjects.Clear();
         AllObjects.Clear();
         _pathIdToObject.Clear();
+
+        Log($"Starting LoadFromFile for: {fileInst.name}");
 
         // First pass: Create all scene objects with transforms
         var transformInfos = fileInst.file.GetAssetsOfType(AssetClassID.Transform)
             .Concat(fileInst.file.GetAssetsOfType(AssetClassID.RectTransform))
             .ToList();
 
+        Log($"Found {transformInfos.Count} transforms");
+
         var goInfos = fileInst.file.GetAssetsOfType(AssetClassID.GameObject).ToList();
+        Log($"Found {goInfos.Count} GameObjects");
+
         var goPathIdToInfo = goInfos.ToDictionary(g => g.PathId);
 
         // Map transform PathId to its parent PathId
@@ -98,6 +123,7 @@ public class SceneData
         }
 
         // Second pass: Build hierarchy
+        Log("Building hierarchy...");
         foreach (var kvp in _pathIdToObject)
         {
             var tfmPathId = kvp.Key;
@@ -117,10 +143,15 @@ public class SceneData
             }
         }
 
+        Log($"Built hierarchy: {AllObjects.Count} objects, {RootObjects.Count} root objects");
+
         // Third pass: Load meshes and materials for objects with MeshFilter/MeshCollider
+        Log("Loading meshes and materials...");
         var meshFilterInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshFilter).ToList();
         var meshRendererInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshRenderer).ToList();
         var meshColliderInfos = fileInst.file.GetAssetsOfType(AssetClassID.MeshCollider).ToList();
+
+        Log($"Found {meshFilterInfos.Count} MeshFilters, {meshRendererInfos.Count} MeshRenderers, {meshColliderInfos.Count} MeshColliders");
 
         // Map GameObject PathId to MeshFilter/MeshRenderer/MeshCollider
         var goToMeshFilter = new Dictionary<long, AssetFileInfo>();
@@ -170,6 +201,8 @@ public class SceneData
         // Load mesh data for each scene object
         // For static objects, prefer MeshCollider's mesh (if available) over MeshFilter's mesh
         // This is important because static objects often use simplified collision meshes for accurate collision representation
+        int meshesLoaded = 0;
+        int meshLoadErrors = 0;
         foreach (var sceneObj in AllObjects)
         {
             var goPathId = tfmToGoMap.GetValueOrDefault(sceneObj.PathId, 0);
@@ -186,30 +219,36 @@ public class SceneData
                 if (mcBf != null)
                 {
                     var meshPtr = mcBf["m_Mesh"];
-                    var meshPathId = meshPtr["m_PathID"].AsLong;
-                    var meshFileId = meshPtr["m_FileID"].AsInt;
-
-                    if (meshPathId != 0)
+                    if (meshPtr != null && !meshPtr.IsDummy)
                     {
-                        try
-                        {
-                            var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
-                            if (meshBf != null)
-                            {
-                                var version = fileInst.file.Metadata.UnityVersion;
-                                sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+                        var meshPathId = meshPtr["m_PathID"].AsLong;
+                        var meshFileId = meshPtr["m_FileID"].AsInt;
 
-                                // Get UVs if available (though collision meshes typically don't have UVs)
-                                if (sceneObj.Mesh.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
-                                {
-                                    sceneObj.UVs = sceneObj.Mesh.UVs[0];
-                                }
-                                meshLoaded = true;
-                            }
-                        }
-                        catch
+                        if (meshPathId != 0)
                         {
-                            // MeshCollider mesh loading failed, will fall back to MeshFilter
+                            try
+                            {
+                                var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                                if (meshBf != null)
+                                {
+                                    var version = fileInst.file.Metadata.UnityVersion;
+                                    sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                    // Get UVs if available (though collision meshes typically don't have UVs)
+                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                    {
+                                        sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                    }
+                                    meshLoaded = true;
+                                    meshesLoaded++;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"MeshCollider mesh load failed for '{sceneObj.Name}': {ex.Message}");
+                                meshLoadErrors++;
+                                // MeshCollider mesh loading failed, will fall back to MeshFilter
+                            }
                         }
                     }
                 }
@@ -222,29 +261,35 @@ public class SceneData
                 if (mfBf != null)
                 {
                     var meshPtr = mfBf["m_Mesh"];
-                    var meshPathId = meshPtr["m_PathID"].AsLong;
-                    var meshFileId = meshPtr["m_FileID"].AsInt;
-
-                    if (meshPathId != 0)
+                    if (meshPtr != null && !meshPtr.IsDummy)
                     {
-                        try
-                        {
-                            var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
-                            if (meshBf != null)
-                            {
-                                var version = fileInst.file.Metadata.UnityVersion;
-                                sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+                        var meshPathId = meshPtr["m_PathID"].AsLong;
+                        var meshFileId = meshPtr["m_FileID"].AsInt;
 
-                                // Get UVs if available
-                                if (sceneObj.Mesh.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                        if (meshPathId != 0)
+                        {
+                            try
+                            {
+                                var meshBf = _workspace.GetBaseField(fileInst, meshFileId, meshPathId);
+                                if (meshBf != null)
                                 {
-                                    sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                    var version = fileInst.file.Metadata.UnityVersion;
+                                    sceneObj.Mesh = new MeshObj(fileInst, meshBf, new UnityVersion(version));
+
+                                    // Get UVs if available
+                                    if (sceneObj.Mesh?.UVs != null && sceneObj.Mesh.UVs.Length > 0 && sceneObj.Mesh.UVs[0] != null)
+                                    {
+                                        sceneObj.UVs = sceneObj.Mesh.UVs[0];
+                                    }
+                                    meshesLoaded++;
                                 }
                             }
-                        }
-                        catch
-                        {
-                            // Mesh loading failed, skip
+                            catch (Exception ex)
+                            {
+                                Log($"MeshFilter mesh load failed for '{sceneObj.Name}': {ex.Message}");
+                                meshLoadErrors++;
+                                // Mesh loading failed, skip
+                            }
                         }
                     }
                 }
@@ -257,7 +302,7 @@ public class SceneData
                 if (mrBf == null) continue;
 
                 var materialsArr = mrBf["m_Materials.Array"];
-                if (materialsArr.Children.Count > 0)
+                if (materialsArr != null && !materialsArr.IsDummy && materialsArr.Children.Count > 0)
                 {
                     var matPtr = materialsArr[0];
                     var matPathId = matPtr["m_PathID"].AsLong;
@@ -269,8 +314,9 @@ public class SceneData
                         {
                             LoadTextureFromMaterial(fileInst, matFileId, matPathId, sceneObj);
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            Log($"Texture load failed for '{sceneObj.Name}': {ex.Message}");
                             // Texture loading failed, skip
                         }
                     }
@@ -278,7 +324,10 @@ public class SceneData
             }
         }
 
+        Log($"Loaded {meshesLoaded} meshes ({meshLoadErrors} errors)");
+
         // Compute world matrices and bounds
+        Log("Computing world matrices and bounds...");
         foreach (var root in RootObjects)
         {
             root.ComputeWorldMatrix();
@@ -288,6 +337,8 @@ public class SceneData
         {
             obj.ComputeBounds();
         }
+
+        Log($"LoadFromFile completed: {AllObjects.Count} objects total");
     }
 
     private void LoadTextureFromMaterial(AssetsFileInstance fileInst, int matFileId, long matPathId, SceneObject sceneObj)
@@ -296,13 +347,28 @@ public class SceneData
         if (matBf == null) return;
 
         // Try to find _MainTex in the saved properties
-        var texEnvs = matBf["m_SavedProperties"]["m_TexEnvs.Array"];
+        var savedProps = matBf["m_SavedProperties"];
+        if (savedProps == null || savedProps.IsDummy) return;
+
+        var texEnvs = savedProps["m_TexEnvs.Array"];
+        if (texEnvs == null || texEnvs.IsDummy) return;
+
         foreach (var texEnv in texEnvs)
         {
-            var texName = texEnv["first"].AsString;
+            if (texEnv == null) continue;
+
+            var firstField = texEnv["first"];
+            if (firstField == null || firstField.IsDummy) continue;
+
+            var texName = firstField.AsString;
             if (texName == "_MainTex" || texName == "_BaseMap" || texName == "_Albedo")
             {
-                var texPtr = texEnv["second"]["m_Texture"];
+                var secondField = texEnv["second"];
+                if (secondField == null || secondField.IsDummy) continue;
+
+                var texPtr = secondField["m_Texture"];
+                if (texPtr == null || texPtr.IsDummy) continue;
+
                 var texPathId = texPtr["m_PathID"].AsLong;
                 var texFileId = texPtr["m_FileID"].AsInt;
 

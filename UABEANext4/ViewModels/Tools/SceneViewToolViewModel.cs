@@ -324,7 +324,7 @@ public partial class SceneViewToolViewModel : Tool
 
         try
         {
-            var sceneData = new SceneData(Workspace);
+            var sceneData = new SceneData(Workspace, msg => Log(SceneLogLevel.Debug, msg));
 
             // Load from first file for now
             var fileInst = _currentFileInsts[0];

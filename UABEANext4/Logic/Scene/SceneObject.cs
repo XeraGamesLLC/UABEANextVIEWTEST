@@ -27,7 +27,7 @@ public class SceneObject
 
     // Mesh data (if this object has a MeshFilter/MeshRenderer)
     public MeshObj? Mesh { get; set; }
-    public bool HasMesh => Mesh != null && Mesh.Vertices.Length > 0;
+    public bool HasMesh => Mesh != null && Mesh.Vertices != null && Mesh.Vertices.Length > 0;
 
     // Texture data (from material's main texture)
     public byte[]? TextureData { get; set; }
@@ -73,7 +73,7 @@ public class SceneObject
 
     public void ComputeBounds()
     {
-        if (!HasMesh || Mesh == null)
+        if (!HasMesh || Mesh == null || Mesh.Vertices == null || Mesh.Vertices.Length < 3)
         {
             BoundsMin = Vector3.Zero;
             BoundsMax = Vector3.Zero;
@@ -83,7 +83,7 @@ public class SceneObject
         var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
         var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
 
-        for (int i = 0; i < Mesh.Vertices.Length; i += 3)
+        for (int i = 0; i + 2 < Mesh.Vertices.Length; i += 3)
         {
             var vertex = new Vector3(Mesh.Vertices[i], Mesh.Vertices[i + 1], Mesh.Vertices[i + 2]);
             var worldVertex = Vector3.Transform(vertex, WorldMatrix);
