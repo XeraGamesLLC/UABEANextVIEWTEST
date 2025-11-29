@@ -32,6 +32,11 @@ public partial class SceneViewToolViewModel : Tool
 
     private List<AssetsFileInstance>? _currentFileInsts;
 
+    /// <summary>
+    /// Action to reset the camera. Set by the view to connect to the SceneViewControl.
+    /// </summary>
+    public Action? ResetCameraAction { get; set; }
+
     [Obsolete("This constructor is for the designer only and should not be used directly.", true)]
     public SceneViewToolViewModel()
     {
@@ -62,11 +67,23 @@ public partial class SceneViewToolViewModel : Tool
             {
                 fileInsts.Add(fileInst);
             }
+            else if (item.ObjectType == WorkspaceItemType.BundleFile)
+            {
+                // If a bundle file is selected, get all its child assets files
+                foreach (var child in item.Children)
+                {
+                    if (child.ObjectType == WorkspaceItemType.AssetsFile && child.Object is AssetsFileInstance childFileInst)
+                    {
+                        fileInsts.Add(childFileInst);
+                    }
+                }
+            }
         }
 
         if (fileInsts.Count > 0)
         {
             _currentFileInsts = fileInsts;
+            StatusText = $"Ready to load scene from {_currentFileInsts.Count} file(s). Click 'Load Scene' to begin.";
         }
     }
 
@@ -90,26 +107,34 @@ public partial class SceneViewToolViewModel : Tool
 
         StatusText = "Loading scene...";
 
-        var sceneData = new SceneData(Workspace);
+        try
+        {
+            var sceneData = new SceneData(Workspace);
 
-        // Load from first file for now
-        var fileInst = _currentFileInsts[0];
-        sceneData.LoadFromFile(fileInst);
+            // Load from first file for now
+            var fileInst = _currentFileInsts[0];
+            sceneData.LoadFromFile(fileInst);
 
-        SceneData = sceneData;
-        IsSceneLoaded = true;
+            SceneData = sceneData;
+            IsSceneLoaded = true;
 
-        var objectCount = sceneData.AllObjects.Count;
-        var meshCount = sceneData.AllObjects.Count(o => o.HasMesh);
-        var texturedCount = sceneData.AllObjects.Count(o => o.HasTexture);
+            var objectCount = sceneData.AllObjects.Count;
+            var meshCount = sceneData.AllObjects.Count(o => o.HasMesh);
+            var texturedCount = sceneData.AllObjects.Count(o => o.HasTexture);
 
-        StatusText = $"Loaded {objectCount} objects ({meshCount} with meshes, {texturedCount} with textures)";
+            StatusText = $"Loaded {objectCount} objects ({meshCount} with meshes, {texturedCount} with textures)";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error loading scene: {ex.Message}";
+            IsSceneLoaded = false;
+        }
     }
 
     [RelayCommand]
     private void ResetCamera()
     {
-        // This will be handled by the view through binding or direct call
+        ResetCameraAction?.Invoke();
         StatusText = "Camera reset to default position.";
     }
 
