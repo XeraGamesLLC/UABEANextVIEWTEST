@@ -816,7 +816,7 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
                 {
                     var srcRow = (height - 1 - y) * stride;
                     var dstRow = y * stride;
-                    Buffer.BlockCopy(obj.TextureData, srcRow, flippedTexture, dstRow, stride);
+                    System.Buffer.BlockCopy(obj.TextureData, srcRow, flippedTexture, dstRow, stride);
                 }
 
                 fixed (byte* ptr = flippedTexture)
