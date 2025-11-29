@@ -68,6 +68,8 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
         {
             SetAndRaise(SceneDataProperty, ref _sceneData, value);
             _dirtyScene = true;
+            // Request a new frame to ensure the scene is rendered
+            InvalidateVisual();
         }
     }
 
@@ -116,6 +118,18 @@ public class SceneViewControl : OpenGlControlBase, ICustomHitTest
             MathF.Sin(pitchRad),
             MathF.Sin(yawRad) * MathF.Cos(pitchRad)
         ));
+    }
+
+    /// <summary>
+    /// Resets the camera to its default position and orientation.
+    /// </summary>
+    public void ResetCamera()
+    {
+        _cameraPosition = new Vector3(0f, 5f, 10f);
+        _cameraYaw = -90f;
+        _cameraPitch = -15f;
+        UpdateCameraVectors();
+        InvalidateVisual();
     }
 
     #region Input Handling
