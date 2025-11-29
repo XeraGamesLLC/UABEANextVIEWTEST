@@ -17,8 +17,8 @@ public partial class ExternalInfo : ViewModelBase
     public ObservableCollection<AssetsFileExternal> Externals { get; set; } = [];
     public ReadOnlyObservableCollection<string> ExternalsDisplay { get; init; }
 
-    private Workspace _workspace;
-    private AssetsFileInstance _fileInst;
+    private Workspace _workspace = null!;
+    private AssetsFileInstance _fileInst = null!;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAssetSelected))]
