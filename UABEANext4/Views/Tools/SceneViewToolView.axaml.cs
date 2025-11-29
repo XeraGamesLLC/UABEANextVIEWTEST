@@ -1,11 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using UABEANext4.ViewModels.Tools;
 using System;
 using System.ComponentModel;
-using System.Threading.Tasks;
 
 namespace UABEANext4.Views.Tools;
 
@@ -16,14 +14,19 @@ public partial class SceneViewToolView : UserControl
     public SceneViewToolView()
     {
         InitializeComponent();
+
+        // Connect scene view control events to view model
         sceneViewControl.SelectionChanged += OnSceneSelectionChanged;
         sceneViewControl.DuplicateRequested += OnDuplicateRequested;
         sceneViewControl.DeleteRequested += OnDeleteRequested;
+
+        // Connect view model actions when DataContext is set
         DataContextChanged += OnDataContextChanged;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        // Unsubscribe from previous view model
         if (_viewModel != null)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -32,34 +35,18 @@ public partial class SceneViewToolView : UserControl
         if (DataContext is SceneViewToolViewModel vm)
         {
             _viewModel = vm;
+
+            // Connect the reset camera action to the control
             vm.ResetCameraAction = () => sceneViewControl.ResetCamera();
-            vm.SaveFileDialogAction = ShowSaveFileDialog;
+
+            // Subscribe to property changes to mark scene as dirty
             vm.PropertyChanged += OnViewModelPropertyChanged;
         }
     }
 
-    private async Task<string?> ShowSaveFileDialog(string defaultName, string filter)
-    {
-        var topLevel = TopLevel.GetTopLevel(this);
-        if (topLevel == null) return null;
-
-        var options = new FilePickerSaveOptions
-        {
-            Title = "Export FBX",
-            SuggestedFileName = defaultName + ".fbx",
-            FileTypeChoices = new[]
-            {
-                new FilePickerFileType("FBX Files") { Patterns = new[] { "*.fbx" } },
-                new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
-            }
-        };
-
-        var result = await topLevel.StorageProvider.SaveFilePickerAsync(options);
-        return result?.TryGetLocalPath();
-    }
-
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // When SceneData property changes (indicating scene modification), mark scene dirty
         if (e.PropertyName == nameof(SceneViewToolViewModel.SceneData))
         {
             sceneViewControl.MarkDirty();

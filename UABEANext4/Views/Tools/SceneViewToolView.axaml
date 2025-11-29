@@ -8,53 +8,122 @@
              x:Class="UABEANext4.Views.Tools.SceneViewToolView"
              x:DataType="tools:SceneViewToolViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,*,Auto" Background="#000000">
-    <Border Grid.Row="0" Background="#000000" BorderBrush="#003344" BorderThickness="0,0,0,1" Padding="12,8">
-      <StackPanel Orientation="Horizontal" Spacing="12">
-        <TextBlock VerticalAlignment="Center" Text="SCENE:" Foreground="#006688" FontWeight="Bold" />
-        <TextBox Text="{Binding SceneName}" Width="120" />
-        <Button Content="LOAD" Command="{Binding LoadSceneCommand}" />
-        <CheckBox IsChecked="{Binding AutoLoad}" Content="AUTO" VerticalAlignment="Center" />
-        <Rectangle Width="1" Fill="#003344" Margin="4,4" />
-        <Button Content="RESET CAM" Command="{Binding ResetCameraCommand}" />
-        <Rectangle Width="1" Fill="#003344" Margin="4,4" />
-        <TextBlock VerticalAlignment="Center" Text="RMB+WASD | SCROLL" Foreground="#006688" FontSize="10" />
+  <UserControl.Styles>
+    <!-- Modern rounded button style -->
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Background" Value="#3a3a3c"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="Button:pointerover">
+      <Setter Property="Background" Value="#505052"/>
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Background" Value="#606062"/>
+    </Style>
+
+    <!-- Modern text box style -->
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Background" Value="#2a2a2c"/>
+      <Setter Property="BorderBrush" Value="#404042"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8,6"/>
+    </Style>
+    <Style Selector="TextBox:focus">
+      <Setter Property="BorderBrush" Value="#0078d4"/>
+    </Style>
+
+    <!-- Tab button style -->
+    <Style Selector="ToggleButton.tabButton">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#a0a0a0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ToggleButton.tabButton:pointerover">
+      <Setter Property="Background" Value="#3a3a3c"/>
+      <Setter Property="Foreground" Value="#e0e0e0"/>
+    </Style>
+    <Style Selector="ToggleButton.tabButton:checked">
+      <Setter Property="Background" Value="#0078d4"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+
+    <!-- Modern border/card style -->
+    <Style Selector="Border.card">
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="#1e1e1e"/>
+      <Setter Property="BorderBrush" Value="#3a3a3c"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Background="#252526">
+    <!-- Toolbar -->
+    <Border Grid.Row="0" Classes="card" Margin="8,8,8,4" Padding="12,8">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock VerticalAlignment="Center" Text="Scene:" Foreground="#e0e0e0" Margin="0,0,4,0" />
+        <TextBox Text="{Binding SceneName}" Width="120" ToolTip.Tip="Scene name to load (e.g., level0)" />
+        <Button x:Name="loadSceneButton" Content="Load Scene" Command="{Binding LoadSceneCommand}" ToolTip.Tip="Load the scene from the selected assets file" />
+        <CheckBox IsChecked="{Binding AutoLoad}" Content="Auto" VerticalAlignment="Center" ToolTip.Tip="Automatically load the scene when a file is opened" Foreground="#e0e0e0" Margin="4,0" />
+        <Rectangle Width="1" Fill="#404042" Margin="8,4" />
+        <Button x:Name="resetCameraButton" Content="Reset Camera" Command="{Binding ResetCameraCommand}" ToolTip.Tip="Reset camera to default position" />
+        <Rectangle Width="1" Fill="#404042" Margin="8,4" />
+        <TextBlock VerticalAlignment="Center" Text="Controls:" FontWeight="SemiBold" Foreground="#e0e0e0" />
+        <TextBlock VerticalAlignment="Center" Text="Right-click + WASD, Scroll to zoom" Foreground="#808080" />
       </StackPanel>
     </Border>
 
-    <Border Grid.Row="1" Background="#000000" BorderBrush="#003344" BorderThickness="0,0,0,1" Padding="8,6">
+    <!-- Tab Buttons (outside the scene view to avoid overlap issues) -->
+    <Border Grid.Row="1" Margin="8,4,8,4">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-          <ToggleButton x:Name="sceneTabButton" Classes="tabButton" Content="SCENE" IsChecked="True" Click="OnSceneTabClick" />
-          <ToggleButton x:Name="logTabButton" Classes="tabButton" Content="LOG" Click="OnLogTabClick" />
-          <ToggleButton x:Name="hierarchyTabButton" Classes="tabButton" Content="HIERARCHY" Click="OnHierarchyTabClick" />
+          <ToggleButton x:Name="sceneTabButton" Classes="tabButton" Content="Scene" IsChecked="True" Click="OnSceneTabClick" />
+          <ToggleButton x:Name="logTabButton" Classes="tabButton" Content="Log" Click="OnLogTabClick" />
+          <ToggleButton x:Name="hierarchyTabButton" Classes="tabButton" Content="Hierarchy" Click="OnHierarchyTabClick" />
 
+          <!-- Log controls (only visible when log tab is active) -->
           <StackPanel x:Name="logControls" Orientation="Horizontal" Spacing="8" Margin="16,0,0,0" IsVisible="False">
-            <Button Content="CLEAR" Command="{Binding ClearLogCommand}" Padding="8,4" />
-            <TextBlock VerticalAlignment="Center" Text="{Binding LogEntries.Count, StringFormat='[ {0} ]'}" Foreground="#006688" />
+            <Button Content="Clear Log" Command="{Binding ClearLogCommand}" ToolTip.Tip="Clear all log entries" Padding="8,4" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding LogEntries.Count, StringFormat='Entries: {0}'}" Foreground="#808080" />
           </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <TextBlock VerticalAlignment="Center" Text="SEL:" Foreground="#006688" />
-          <TextBlock VerticalAlignment="Center" Text="{Binding SelectedObject.Name}" Foreground="#00d9ff" FontWeight="Bold" />
-          <Rectangle Width="1" Fill="#003344" Margin="4,2" />
-          <Button Content="EXPORT FBX" Command="{Binding ExportAsFbxCommand}" IsVisible="{Binding SelectedObject.HasMesh}" Padding="8,4" />
-          <CheckBox IsChecked="{Binding ExportWithTextures}" Content="+ TEX" VerticalAlignment="Center" IsVisible="{Binding SelectedObject.HasMesh}" />
+        <!-- Object actions (always visible when an object is selected) -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <Button Content="Duplicate" Command="{Binding DuplicateObjectCommand}" ToolTip.Tip="Duplicate selected object (Ctrl+D)" Padding="8,4" />
+          <Button Content="Delete" Command="{Binding DeleteObjectCommand}" ToolTip.Tip="Delete selected object (Del)" Padding="8,4" />
+          <Button Content="Move to Root" Command="{Binding MoveToRootCommand}" ToolTip.Tip="Move selected object to root level" Padding="8,4" />
         </StackPanel>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="2" Margin="8,8,8,8">
-      <Border x:Name="scenePanel" Background="#000000" BorderBrush="#003344" BorderThickness="1" IsVisible="True">
-        <sceneview:SceneViewControl x:Name="sceneViewControl" SceneData="{Binding SceneData}" ClipToBounds="True" />
+    <!-- Content Area -->
+    <Grid Grid.Row="2" Margin="8,0,8,8">
+      <!-- Scene View Panel -->
+      <Border x:Name="scenePanel" Classes="card" IsVisible="True">
+        <sceneview:SceneViewControl x:Name="sceneViewControl"
+                                     SceneData="{Binding SceneData}"
+                                     ClipToBounds="True" />
       </Border>
 
-      <Border x:Name="logPanel" Background="#000000" BorderBrush="#003344" BorderThickness="1" IsVisible="False">
-        <ListBox ItemsSource="{Binding LogEntries}" Background="Transparent" Padding="8">
+      <!-- Log Panel -->
+      <Border x:Name="logPanel" Classes="card" IsVisible="False">
+        <ListBox ItemsSource="{Binding LogEntries}"
+                 Background="Transparent"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 Padding="8">
           <ListBox.ItemTemplate>
             <DataTemplate>
-              <TextBlock Text="{Binding FormattedMessage}" FontFamily="Consolas,monospace" FontSize="11" Margin="0,1">
+              <TextBlock Text="{Binding FormattedMessage}"
+                         FontFamily="Consolas, Courier New, monospace"
+                         FontSize="12"
+                         Margin="0,2">
                 <TextBlock.Foreground>
                   <MultiBinding Converter="{x:Static tools:LogLevelToColorConverter.Instance}">
                     <Binding Path="Level" />
@@ -66,27 +135,18 @@
         </ListBox>
       </Border>
 
-      <Border x:Name="hierarchyPanel" Background="#000000" BorderBrush="#003344" BorderThickness="1" IsVisible="False" Padding="8">
-        <Grid RowDefinitions="Auto,Auto,*">
-          <TextBlock Grid.Row="0" Text="SCENE HIERARCHY" FontWeight="Bold" Foreground="#00d9ff" Margin="0,0,0,8" />
-
-          <Border Grid.Row="1" Background="#001a22" Padding="8,6" Margin="0,0,0,8" BorderBrush="#003344" BorderThickness="1"
-                  IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <TextBlock VerticalAlignment="Center" Text="{Binding SelectedObject.Name}" Foreground="#00d9ff" FontWeight="Bold" />
-              <Rectangle Width="1" Fill="#003344" Margin="4,2" />
-              <Button Content="DUP" Command="{Binding DuplicateObjectCommand}" Padding="8,4" />
-              <Button Content="DEL" Command="{Binding DeleteObjectCommand}" Padding="8,4" />
-              <Button Content="ROOT" Command="{Binding MoveToRootCommand}" Padding="8,4" />
-              <Button Content="FBX" Command="{Binding ExportAsFbxCommand}" Padding="8,4" IsVisible="{Binding SelectedObject.HasMesh}" />
-            </StackPanel>
-          </Border>
-
-          <TreeView Grid.Row="2" x:Name="hierarchyTree" ItemsSource="{Binding SceneData.RootObjects}" Background="Transparent" SelectedItem="{Binding SelectedObject, Mode=TwoWay}">
+      <!-- Hierarchy Panel -->
+      <Border x:Name="hierarchyPanel" Classes="card" IsVisible="False" Padding="8">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Text="Scene Hierarchy" FontWeight="SemiBold" Foreground="#e0e0e0" Margin="0,0,0,8" />
+          <TreeView Grid.Row="1" x:Name="hierarchyTree"
+                    ItemsSource="{Binding SceneData.RootObjects}"
+                    Background="Transparent"
+                    SelectedItem="{Binding SelectedObject, Mode=TwoWay}">
             <TreeView.ItemTemplate>
               <TreeDataTemplate ItemsSource="{Binding Children}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                  <TextBlock Text="{Binding Name}" Foreground="#00d9ff">
+                  <TextBlock Text="{Binding Name}" Foreground="#e0e0e0">
                     <TextBlock.FontWeight>
                       <Binding Path="HasMesh">
                         <Binding.Converter>
@@ -95,7 +155,9 @@
                       </Binding>
                     </TextBlock.FontWeight>
                   </TextBlock>
-                  <TextBlock Text="{Binding Children.Count, StringFormat='({0})'}" Foreground="#006688" IsVisible="{Binding Children.Count}" />
+                  <TextBlock Text="{Binding Children.Count, StringFormat='({0})'}"
+                             Foreground="#606060"
+                             IsVisible="{Binding Children.Count}" />
                 </StackPanel>
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
@@ -104,8 +166,9 @@
       </Border>
     </Grid>
 
-    <Border Grid.Row="3" Background="#001a22" Padding="12,6" Margin="8,0,8,8" BorderBrush="#003344" BorderThickness="1">
-      <TextBlock Text="{Binding StatusText}" Foreground="#00d9ff" FontSize="11" FontFamily="Consolas,monospace" />
+    <!-- Status Bar -->
+    <Border Grid.Row="3" Background="#1e1e1e" CornerRadius="0,0,8,8" Padding="12,6" Margin="8,0,8,8">
+      <TextBlock Text="{Binding StatusText}" Foreground="#a0a0a0" FontSize="11" />
     </Border>
   </Grid>
 </UserControl>

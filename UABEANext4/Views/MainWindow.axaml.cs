@@ -18,21 +18,6 @@ public partial class MainWindow : Window
         InitializeComponent();
 #endif
         AddHandler(DragDrop.DropEvent, Drop);
-
-        // Set up window dragging on title bar
-        var titleBar = this.FindControl<Panel>("TitleBar");
-        if (titleBar != null)
-        {
-            titleBar.PointerPressed += TitleBar_PointerPressed;
-        }
-    }
-
-    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            BeginMoveDrag(e);
-        }
     }
 
     private async Task Drop(object? sender, DragEventArgs e)

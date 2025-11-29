@@ -7,12 +7,9 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="UABEANext4.Views.Tools.InspectorToolView"
              x:DataType="tools:InspectorToolViewModel">
-  <Grid Background="#252526">
-    <Border Background="#1e1e1e" CornerRadius="8" Margin="8">
-      <um:AssetDataTreeView
-        Workspace="{Binding Workspace}"
-        ActiveAssets="{Binding ActiveAssets}"
-        Margin="4" />
-    </Border>
-  </Grid>
+  <um:AssetDataTreeView
+    Workspace="{Binding Workspace}"
+    ActiveAssets="{Binding ActiveAssets}"
+    Margin="0,0,0,0">
+  </um:AssetDataTreeView>
 </UserControl>

@@ -8,38 +8,19 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="UABEANext4.Views.Tools.HierarchyToolView"
              x:DataType="tools:HierarchyToolViewModel">
-  <Grid RowDefinitions="*,Auto" Background="#252526">
-    <!-- Tree View -->
-    <Border Grid.Row="0" Background="#1e1e1e" CornerRadius="8" Margin="8,8,8,4">
-      <TreeView Background="Transparent" Name="GameObjectTreeView"
-                SelectionChanged="HierarchyTreeView_OnSelectionChanged"
-                SelectedItem="{Binding SelectedItem}"
-                ItemsSource="{Binding RootItems}"
-                Margin="4">
-        <TreeView.ItemTemplate>
-          <TreeDataTemplate DataType="{x:Type hier:HierarchyItem}" ItemsSource="{Binding Children}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Text="{Binding Name}" Foreground="#e0e0e0" Padding="4,2" />
-              <TextBlock Text="{Binding Children.Count, StringFormat='({0})'}"
-                         Foreground="#606060"
-                         IsVisible="{Binding Children.Count}"
-                         VerticalAlignment="Center" />
-            </StackPanel>
-          </TreeDataTemplate>
-        </TreeView.ItemTemplate>
-        <TreeView.Styles>
-          <Style Selector="TreeViewItem" x:DataType="hier:HierarchyItem">
-            <Setter Property="IsExpanded" Value="{Binding Expanded}" />
-          </Style>
-        </TreeView.Styles>
-      </TreeView>
-    </Border>
-
-    <!-- Options Bar -->
-    <Border Grid.Row="1" Background="#2a2a2c" CornerRadius="6" Margin="8,4,8,8" Padding="8,6">
-      <CheckBox IsChecked="{Binding SortAlphabetically}" IsEnabled="{Binding !IsLoadingNewItems}" Foreground="#e0e0e0">
-        Sort root GameObjects alphabetically
-      </CheckBox>
-    </Border>
+  <Grid RowDefinitions="*,20">
+    <TreeView Grid.Row="0" Margin="0,0,0,0" Background="{DynamicResource DockThemeListBackgroundBrush}" Name="GameObjectTreeView" SelectionChanged="HierarchyTreeView_OnSelectionChanged" SelectedItem="{Binding SelectedItem}" ItemsSource="{Binding RootItems}">
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate DataType="{x:Type hier:HierarchyItem}" ItemsSource="{Binding Children}">
+          <TextBlock Text="{Binding Name}" />
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="hier:HierarchyItem">
+          <Setter Property="IsExpanded" Value="{Binding Expanded}" />
+        </Style>
+      </TreeView.Styles>
+    </TreeView>
+    <CheckBox Grid.Row="1" IsChecked="{Binding SortAlphabetically}" IsEnabled="{Binding !IsLoadingNewItems}">Sort root GameObjects alphabetically</CheckBox>
   </Grid>
 </UserControl>

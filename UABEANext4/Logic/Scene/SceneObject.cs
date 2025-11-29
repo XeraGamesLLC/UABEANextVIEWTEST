@@ -8,43 +8,44 @@ using UABEANext4.Logic.Mesh;
 
 namespace UABEANext4.Logic.Scene;
 
+/// <summary>
+/// Represents a single object in the scene view with transform, mesh, and material data.
+/// </summary>
 public class SceneObject
 {
     public string Name { get; set; } = string.Empty;
     public long PathId { get; set; }
     public AssetInst? GameObjectAsset { get; set; }
 
+    // Transform data
     public Vector3 LocalPosition { get; set; } = Vector3.Zero;
     public Quaternion LocalRotation { get; set; } = Quaternion.Identity;
     public Vector3 LocalScale { get; set; } = Vector3.One;
 
+    // World transform (computed from hierarchy)
     public Matrix4x4 WorldMatrix { get; set; } = Matrix4x4.Identity;
 
+    // Mesh data (if this object has a MeshFilter/MeshRenderer)
     public MeshObj? Mesh { get; set; }
     public bool HasMesh => Mesh != null && Mesh.Vertices != null && Mesh.Vertices.Length > 0;
 
+    // Texture data (from material's main texture)
     public byte[]? TextureData { get; set; }
     public int TextureWidth { get; set; }
     public int TextureHeight { get; set; }
     public bool HasTexture => TextureData != null && TextureData.Length > 0;
 
+    // UV data for texture mapping
     public float[]? UVs { get; set; }
 
-    public float[]? LightmapUVs { get; set; }
-    public byte[]? LightmapData { get; set; }
-    public int LightmapWidth { get; set; }
-    public int LightmapHeight { get; set; }
-    public Vector4 LightmapScaleOffset { get; set; } = new Vector4(1, 1, 0, 0);
-    public bool HasLightmap => LightmapData != null && LightmapData.Length > 0;
-
+    // Hierarchy
     public SceneObject? Parent { get; set; }
     public List<SceneObject> Children { get; } = new();
 
+    // Selection state
     public bool IsSelected { get; set; }
 
-    public SceneObject? RootBone { get; set; }
-    public bool IsSkinnedMesh { get; set; }
-
+    // Bounding box for picking
     public Vector3 BoundsMin { get; set; }
     public Vector3 BoundsMax { get; set; }
 
@@ -63,11 +64,7 @@ public class SceneObject
             WorldMatrix = localMatrix;
         }
 
-        if (IsSkinnedMesh && RootBone != null)
-        {
-            WorldMatrix = RootBone.WorldMatrix;
-        }
-
+        // Recursively update children
         foreach (var child in Children)
         {
             child.ComputeWorldMatrix();
@@ -106,6 +103,7 @@ public class SceneObject
         if (!HasMesh)
             return false;
 
+        // Simple AABB intersection test
         var invDir = new Vector3(
             rayDirection.X != 0 ? 1f / rayDirection.X : float.MaxValue,
             rayDirection.Y != 0 ? 1f / rayDirection.Y : float.MaxValue,

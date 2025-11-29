@@ -7,9 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using UABEANext4.AssetWorkspace;
 using UABEANext4.Logic;
 using UABEANext4.Logic.Scene;
@@ -41,12 +39,10 @@ public partial class SceneViewToolViewModel : Tool
     [ObservableProperty]
     private bool _autoLoad = true;
 
-    [ObservableProperty]
-    private bool _exportWithTextures = true;
-
+    /// <summary>
+    /// Log entries for scene operations and diagnostics
+    /// </summary>
     public ObservableCollection<SceneLogEntry> LogEntries { get; } = new();
-
-    public Func<string, string, Task<string?>>? SaveFileDialogAction { get; set; }
 
     private List<AssetsFileInstance>? _currentFileInsts;
     private bool _hasAutoLoaded = false;
@@ -524,12 +520,21 @@ public partial class SceneViewToolViewModel : Tool
         try
         {
             var obj = SelectedObject;
+
+            // Remove from current parent
             obj.Parent.Children.Remove(obj);
+
+            // Add to root
             obj.Parent = null;
             SceneData.RootObjects.Add(obj);
+
+            // Recompute world matrix
             obj.ComputeWorldMatrix();
             obj.ComputeBounds();
+
+            // Notify scene view to rebuild
             OnPropertyChanged(nameof(SceneData));
+
             Log(SceneLogLevel.Info, $"Moved object to root: {obj.Name}");
             StatusText = $"Moved to root: {obj.Name}";
         }
@@ -540,60 +545,9 @@ public partial class SceneViewToolViewModel : Tool
         }
     }
 
-    [RelayCommand]
-    private async Task ExportAsFbx()
-    {
-        if (SelectedObject == null)
-        {
-            StatusText = "No object selected to export.";
-            return;
-        }
-
-        if (!SelectedObject.HasMesh)
-        {
-            StatusText = "Selected object has no mesh to export.";
-            return;
-        }
-
-        if (SelectedObject.IsSkinnedMesh)
-        {
-            StatusText = "Skinned meshes are not supported for FBX export.";
-            return;
-        }
-
-        if (SaveFileDialogAction == null)
-        {
-            StatusText = "Export not available.";
-            return;
-        }
-
-        try
-        {
-            var fileName = SelectedObject.Name.Replace(" ", "_").Replace("/", "_").Replace("\\", "_");
-            var filePath = await SaveFileDialogAction(fileName, "FBX files|*.fbx");
-
-            if (string.IsNullOrEmpty(filePath))
-            {
-                StatusText = "Export cancelled.";
-                return;
-            }
-
-            FbxExporter.ExportToFbx(SelectedObject, filePath, ExportWithTextures);
-
-            var msg = $"Exported: {Path.GetFileName(filePath)}";
-            if (ExportWithTextures && SelectedObject.HasTexture)
-            {
-                msg += " (with texture)";
-            }
-            Log(SceneLogLevel.Info, msg);
-            StatusText = msg;
-        }
-        catch (Exception ex)
-        {
-            Log(SceneLogLevel.Error, $"Export failed: {ex.Message}");
-            StatusText = $"Export failed: {ex.Message}";
-        }
-    }
+    /// <summary>
+    /// Moves the selected object to be a child of the specified parent object.
+    /// </summary>
     public void MoveObjectToParent(SceneObject objectToMove, SceneObject? newParent)
     {
         if (SceneData == null) return;

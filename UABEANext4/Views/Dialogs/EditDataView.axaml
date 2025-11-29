@@ -7,29 +7,21 @@
              mc:Ignorable="d" d:DesignWidth="350" d:DesignHeight="550"
              x:Class="UABEANext4.Views.Dialogs.EditDataView"
              x:DataType="dlg:EditDataViewModel">
-  <Grid Background="#252526">
+  <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="*" />
-      <RowDefinition Height="Auto" />
+      <RowDefinition Height="30" />
     </Grid.RowDefinitions>
-
-    <!-- Text Editor -->
-    <Border Grid.Row="0" Background="#1e1e1e" CornerRadius="8" Margin="12,12,12,8">
-      <avedit:TextEditor
-        FontFamily="Cascadia Code,Consolas,Monospace,Courier,DejaVu Sans Mono,Roboto Mono,Menlo"
-        Name="textEditor" Document="{Binding Document}"
-        Background="Transparent" Foreground="#e0e0e0"
-        Margin="8" />
-    </Border>
-
-    <!-- Button Bar -->
-    <Border Grid.Row="1" Background="#2a2a2c" CornerRadius="6" Margin="12,4,12,12" Padding="8">
-      <Grid ColumnDefinitions="*,8,*">
-        <Button Grid.Column="0" Command="{Binding BtnOk_Click}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="16,8">Ok</Button>
-        <Button Grid.Column="2" Command="{Binding BtnCancel_Click}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="16,8">Cancel</Button>
-      </Grid>
-    </Border>
+    <avedit:TextEditor
+      FontFamily="Cascadia Code,Consolas,Monospace,Courier,DejaVu Sans Mono,Roboto Mono,Menlo"
+      Grid.Row="0" Name="textEditor" Document="{Binding Document}" />
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <Button Grid.Column="0" Command="{Binding BtnOk_Click}">Ok</Button>
+      <Button Grid.Column="1" Command="{Binding BtnCancel_Click}">Cancel</Button>
+    </Grid>
   </Grid>
 </UserControl>

@@ -11,42 +11,32 @@
   <UserControl.KeyBindings>
     <KeyBinding Gesture="F2" Command="{Binding RenameItem}" />
   </UserControl.KeyBindings>
-
+  
   <UserControl.Resources>
     <uac:WsItemColorConverter x:Key="WsItemColorConverter" />
   </UserControl.Resources>
-
-  <Grid RowDefinitions="*,Auto" Background="#252526">
-    <!-- Tree View -->
-    <Border Grid.Row="0" Background="#1e1e1e" CornerRadius="8" Margin="8,8,8,4">
-      <TreeView Background="Transparent" Name="SolutionTreeView"
-                ItemsSource="{Binding Workspace.RootItems}" SelectedItems="{Binding SelectedItems}"
-                SelectionMode="Multiple" Margin="4">
-        <TreeView.ItemTemplate>
-          <TreeDataTemplate DataType="{x:Type uaw:WorkspaceItem}" ItemsSource="{Binding Children}">
-            <TextBlock Text="{Binding Name}" Padding="4,2">
-              <TextBlock.Foreground>
-                <MultiBinding Converter="{StaticResource WsItemColorConverter}">
-                  <Binding Path="ObjectType" />
-                  <DynamicResource ResourceKey="DockThemeListBackgroundBrush" />
-                </MultiBinding>
-              </TextBlock.Foreground>
-            </TextBlock>
-          </TreeDataTemplate>
-        </TreeView.ItemTemplate>
-      </TreeView>
-    </Border>
-
-    <!-- Button Bar -->
-    <Border Grid.Row="1" Background="#2a2a2c" CornerRadius="6" Margin="8,4,8,8" Padding="4">
-      <Grid ColumnDefinitions="*,4,*,4,*">
-        <Button Grid.Column="0" Command="{Binding LoadAll}" IsEnabled="{Binding Workspace.RootItems.Count}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="8,4">Load all</Button>
-        <Button Grid.Column="2" Click="ExpandAll" IsEnabled="{Binding Workspace.RootItems.Count}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="8,4">Expand all</Button>
-        <Button Grid.Column="4" Click="CollapseAll" IsEnabled="{Binding Workspace.RootItems.Count}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="8,4">Collapse all</Button>
-      </Grid>
-    </Border>
+  
+  <Grid RowDefinitions="*,26">
+    <TreeView Margin="0,0,0,0" Background="{DynamicResource DockThemeListBackgroundBrush}" Name="SolutionTreeView"
+              ItemsSource="{Binding Workspace.RootItems}" SelectedItems="{Binding SelectedItems}"
+              SelectionMode="Multiple" Grid.Row="0">
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate DataType="{x:Type uaw:WorkspaceItem}" ItemsSource="{Binding Children}">
+          <TextBlock Text="{Binding Name}">
+            <TextBlock.Foreground>
+              <MultiBinding Converter="{StaticResource WsItemColorConverter}">
+                <Binding Path="ObjectType" />
+                <DynamicResource ResourceKey="DockThemeListBackgroundBrush" />
+              </MultiBinding>
+            </TextBlock.Foreground>
+          </TextBlock>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+    <Grid ColumnDefinitions="*,*,*" Grid.Row="1">
+      <Button Grid.Column="0" Command="{Binding LoadAll}" IsEnabled="{Binding Workspace.RootItems.Count}">Load all</Button>
+      <Button Grid.Column="1" Click="ExpandAll" IsEnabled="{Binding Workspace.RootItems.Count}">Expand all</Button>
+      <Button Grid.Column="2" Click="CollapseAll" IsEnabled="{Binding Workspace.RootItems.Count}">Collapse all</Button>
+    </Grid>
   </Grid>
 </UserControl>
